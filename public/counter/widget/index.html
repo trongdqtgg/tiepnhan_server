@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Theo yeu cau: "widget có 1 text ẩn Widget quầy dưới thanh công cụ dọc, ngang. Đổi tên nó thành
+     chữ Q thôi" - the <title> nay KHONG hien thi truc tiep tren giao dien (widget khong co thanh
+     tieu de rieng vi BrowserWindow tao voi frame:false - xem createWidgetWindow() trong
+     electron-widget/main.js), nhung mot so truong hop he dieu hanh/trinh duyet (di chuot qua cua
+     so, xem truoc trong Alt+Tab...) van lay CHINH gia tri <title> nay lam nhan/tooltip hien thi -
+     doi tu "Widget quầy" (dai, chiem nhieu cho khi hien tooltip) thanh gon dung 1 chu "Q" theo
+     dung yeu cau. -->
+<title>Q</title>
+<script>
+  // Gan class "vertical" NGAY LUC PHAN TICH <head> (truoc khi <body> duoc ve) neu URL co
+  // "?orientation=vertical" (electron-widget/main.js tu gan tham so nay vao widgetUrl() khi
+  // config.widgetOrientation === 'vertical' - doi qua muc tray "Hiển thị widget theo chiều dọc") -
+  // gan SOM tren <html> (chua co <body> luc nay) thay vi doi widget.js chay o cuoi trang, tranh
+  // "nhap nhay" 1 khoanh khac hien ngang roi moi chuyen sang doc ngay sau do.
+  try {
+    if (new URLSearchParams(location.search).get('orientation') === 'vertical') {
+      document.documentElement.classList.add('vertical');
+    }
+  } catch { /* URLSearchParams khong ho tro (trinh duyet qua cu) - bo qua, giu mac dinh ngang */ }
+</script>
+<style>
+  /**
+   * Trang SIEU NHO danh rieng cho ung dung desktop (Electron) luon-noi-ben-tren, dung o goc man
+   * hinh nhu 1 tien ich ho tro cho nhan vien tiep nhan. Khac voi /counter (trang quan ly day du),
+   * trang nay CHI hien nhung gi can thao tac ngay - va TAT CA gon trong DUNG 1 DONG NGANG duy
+   * nhat de widget cang nho cang tot: ma quay, so dang phuc vu, 3 nut goi/goi lai/bo qua, va cum
+   * so luong hang cho theo tung doi tuong uu tien (#queueCounts) - MOI SO LA 1 NUT BAM LUON (mau
+   * rieng trung voi mau so tren man hinh benh nhan), bam vao = goi tiep theo CUA RIENG doi tuong
+   * do (gop chung "xem so luong cho" va "goi rieng tung doi tuong" lam 1, khong con dong rieng
+   * cho 8 nut icon nhu truoc), roi den nut ⚙️ dan sang trang /counter day du (chon quay, bat dau
+   * ca, doi thu tu uu tien...). Nhan/ten benh nhan chi hien qua tooltip (rê chuột) thay vi 1 dong
+   * rieng, de khong lam widget cao them.
+   *
+   * Trang nay dung duoc CA trong trinh duyet thuong (de test/xem thu) LAN trong cua so Electron -
+   * khi chay trong Electron, script preload.js se gan san `window.widgetBridge` de nut ⚙️ mo
+   * dung cua so quan ly cua ung dung (thay vi dieu huong ca trang widget nay sang trang khac).
+   */
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: transparent;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #card {
+    /* Theo yeu cau: "Điều chỉnh phong cách của widget thành màu trắng, xanh dương ngành y tế k
+       được phép đen tối" - toan bo <style> tu day tro xuong da doi tu bang mau TOI (nen xanh navy
+       dam #0f172a, chu sang mau) sang bang mau SANG (nen trang, chu xanh duong dam/xam dam) dung
+       phong cach thuong thay o cac ung dung y te: nen trang chu dao, diem nhan mau XANH DUONG, khong
+       con mang nen/o mau den/xam dam nao nua. Ap dung DONG NHAT cho CA 2 CHE DO (ngang lan doc) vi
+       day la thay doi ve MAU SAC toan widget, khong phai bo cuc/kich thuoc (khac voi cac yeu cau
+       truoc chi rieng cho 1 che do).
+
+       Theo yeu cau tiep theo: "làm trong suốt nền thanh widget nữa là được" - truoc day nen la
+       `#ffffffee` (trang, do trong suot ~93%, gan nhu dac) - da doi sang `transparent` (100% trong
+       suot) de nhin XUYEN QUA duoc man hinh/cua so ben duoi.
+
+       Theo phan anh SAU DO: "nền widget cho đậm lên 1 tý đừng trong suốt quá" - `transparent`
+       (0% opacity) hoa ra la QUA MUC, chu/icon kho doc tren nen tap phia sau - nay chinh lai thanh
+       mau TRANG voi 1 chut do dac (rgba trang, alpha ~0.3) - vua CO mot lop nen mo nhe de chu/icon
+       de doc hon han so voi trong suot hoan toan, vua VAN con thay xuyen duoc mot phan man hinh/cua
+       so phia sau (khac han voi ban dau `#ffffffee` gan nhu dac 93%) - diem can bang giua 2 lan
+       yeu cau truoc do. */
+    width: 100%; height: 100%;
+    background: rgba(255, 255, 255, 0.3);
+    border: 1px solid #93c5fd;
+    border-radius: 10px;
+    color: #1e3a5f;
+    display: flex;
+    flex-direction: column;
+    /* Vung nay dung de KEO CA CUA SO (Electron frameless khong co thanh tieu de rieng) -
+       cac nut/khu vuc can bam duoc phai khai bao lai "no-drag" o duoi. */
+    -webkit-app-region: drag;
+  }
+  button, .no-drag { -webkit-app-region: no-drag; }
+
+  #mainView {
+    /**
+     * Theo yeu cau: "điều chỉnh giao diện widget ngang k tự động co lại các nút" - TRUOC DAY khi
+     * tong be rong noi dung (ma quay + so + 3 nut goi so + 8 nut cap so nhanh + cac nut khac + cum
+     * so luong cho) VUOT QUA be rong cua so widget dang co (vi du cua so dang de o kich thuoc mac
+     * dinh/nho), phan noi dung thua bi AN MAT (clip) boi `overflow: hidden` cua html/body ben tren -
+     * nhin no giong nhu cac nut bi "cắt/co lại" o mep phai. NAY cho CHINH #mainView tu CUON NGANG
+     * duoc khi noi dung rong hon cua so (giong dung cach #queueCounts ben duoi da lam tu truoc: an
+     * luon thanh cuon cho gon, keo/cuon chuot ngang van xem duoc het) - moi nut LUON giu dung kich
+     * thuoc that (26x26 hoac tuy nut), KHONG BAO GIO bi bop nho/cat mat nua; neu cua so dang hep thi
+     * chi can cuon ngang (hoac keo rong cua so ra, hoac chuyen sang che do doc o muc 49) de xem het.
+     */
+    width: 100%;
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 6px;
+    white-space: nowrap;
+    height: 40px;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none; /* an thanh cuon (Firefox) - trinh duyet Chromium/Electron dung rule -webkit ben duoi */
+  }
+  #mainView::-webkit-scrollbar { display: none; }
+
+  /**
+   * Theo yeu cau: "widget ngang hãy bắt chước widget dọc" - o CHE DO DOC, tung nhom nut (goi so/
+   * icon phu/cap so nhanh...) duoc xep MOI NHOM 1 HANG RIENG (flex-direction:column) nen nhin tach
+   * bach, ro rang tung nhom - o CHE DO NGANG (mac dinh) thi TAT CA don vao 1 hang duy nhat nen truoc
+   * day cac nhom bi "dinh" vao nhau, kho phan biet (dau la nhom nut goi so, dau la nhom cap so
+   * nhanh, dau la so luong cho...). CHI danh cho che do ngang (KHONG dung `html.vertical`, giu
+   * nguyen che do doc nhu cu theo dung yeu cau "đừng chỉnh widget dọc"): lam vach ngan (.sep-line)
+   * DAM/SANG hon han de nhin ra ranh gioi giua cac nhom NGAY LAP TUC, giong nhu cach cac hang trong
+   * che do doc duoc phan tach ro bang dong ke ngang.
+   */
+  html:not(.vertical) .sep-line {
+    width: 2px;
+    margin: 5px 3px;
+    background: #93c5fd;
+    border-radius: 1px;
+  }
+  /* Cum "Cấp số nhanh" (8 nut) duoc dong khung rieng (nen + vien nhe + bo goc) de nhin RO RANG day
+     la 1 NHOM RIENG BIET, tach bach voi cac nut/cum khac ben canh - bat chuoc dung tinh than "moi
+     nhom 1 khoi rieng" cua che do doc, chi khac la o day nam ngang thay vi xep chong. Doi mau nen
+     tu toi (#0b1220) sang xanh duong RAT NHAT (#eff6ff) theo phong cach trang/xanh duong moi. */
+  html:not(.vertical) #quickIssueActions {
+    /* Theo phan anh: "tôi muốn trong suốt hơn nữa này quá đậm r" - sau khi #card da chuyen sang
+       `transparent` hoan toan (muc 66), cac KHUNG NEN RIENG cua tung nhom/nut (vi du khung "Cấp số
+       nhanh"/"Số lượng chờ" nay, hoac nen tung nut) van con la mau DAC (#eff6ff, opacity 100%) nen
+       nhin TONG THE widget van rat "day"/it xuyen thau - doi sang rgba() voi kenh alpha ~0.45-0.55
+       (giu NGUYEN tong mau xanh duong nhat cu, chi giam do dac) de nen thuc su MO/xuyen thay duoc
+       man hinh/cua so phia sau, khong con la 1 khoi mau dac nua. */
+    background: rgba(239, 246, 255, 0.75);
+    border: 1px solid rgba(191, 219, 254, 0.9);
+    border-radius: 8px;
+    padding: 3px 4px;
+  }
+  /* Cum so luong dang cho theo doi tuong cung duoc dong khung tuong tu, de khong bi "dinh lien" vao
+     ngay cum cap so nhanh dung canh no (2 cum mau sac gan giong nhau, de nham neu khong co khung
+     phan tach ro). */
+  html:not(.vertical) #queueCounts {
+    background: rgba(239, 246, 255, 0.75);
+    border: 1px solid rgba(191, 219, 254, 0.9);
+    border-radius: 8px;
+    padding: 3px 5px;
+  }
+
+  #counterTag {
+    flex: 0 0 auto;
+    font-size: 11px; font-weight: 700; color: #1d4ed8;
+    /* Cung theo yeu cau "trong suốt hơn nữa" o tren: doi nen dac #dbeafe -> rgba cung mau, giam do
+       dac con ~55%. */
+    background: rgba(219, 234, 254, 0.8); border-radius: 5px; padding: 3px 5px;
+  }
+  #sttNumber {
+    /* Theo yeu cau: "STT tiếp nhận Widget nhỏ lại để k chiếm diện tích chiều ngang" - giam font-size
+       (18px -> 13px) VA giam min-width (30px -> 20px, vua du 3 chu so) de con chiu it dat ngang
+       nhat co the, danh cho #queueCounts (flex:1, co the cuon) va cac nut khac. Mau chu mac dinh
+       doi tu vang gold (#facc15, hop nen toi) sang xanh duong dam (#1d4ed8, hop nen trang) - xem
+       renderTicket() trong widget.js (tu doi mau theo dung mau cua doi tuong uu tien dang phuc vu). */
+    flex: 0 0 auto;
+    font-size: 13px; font-weight: 800; line-height: 1;
+    color: #1d4ed8; min-width: 20px; text-align: center;
+  }
+
+  .sep-line { flex: 0 0 auto; width: 1px; align-self: stretch; margin: 6px 0; background: #bfdbfe; }
+
+  #actions { flex: 0 0 auto; display: flex; gap: 3px; }
+  #actions button {
+    cursor: pointer; border: none; border-radius: 6px; width: 26px; height: 26px;
+    font-size: 13px; color: #fff; line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #btnNext { background: #2563eb; }
+  #btnNext:hover { background: #1d4ed8; }
+  #btnRecall { background: #15803d; }
+  #btnRecall:hover { background: #166534; }
+  #btnSkip { background: #b45309; }
+  #btnSkip:hover { background: #92400e; }
+  #actions button:disabled { opacity: 0.35; cursor: default; }
+
+  /**
+   * Hop nhat: truoc day day la 1 dong CHU (khong bam duoc) hien so luong dang cho theo tung doi
+   * tuong, VA co them 1 DONG RIENG ben duoi gom 8 nut icon "goi tiep theo" theo tung doi tuong -
+   * nay GOP LAM 1: moi so luong o day chinh la 1 NUT BAM LUON (bam vao = goi tiep theo cua rieng
+   * doi tuong do, xem renderQueueCounts()/callNextByPriority() trong widget.js), khong con dong
+   * thu 2 nua - toan bo widget quay lai vua DUNG 1 DONG NGANG duy nhat.
+   */
+  #queueCounts {
+    /* Truoc day la flex:1 1 auto (tu gian NO/co lai theo khong gian con thua/thieu, kem tu cuon
+       ngang RIENG trong pham vi cua no) - nay doi thanh flex:0 0 auto (giu dung kich thuoc that
+       theo noi dung, KHONG co lai nua) vi viec cuon ngang khi thieu cho GIO DA CHUYEN LEN cho ca
+       #mainView lo chung (xem ghi chu o #mainView o tren) - tranh tinh trang "cuon long trong cuon"
+       (2 lop cuon ngang long nhau, de gay kho chiu khi thao tac). */
+    flex: 0 0 auto;
+    display: flex; align-items: center; gap: 2px;
+  }
+  #queueCounts button {
+    -webkit-app-region: no-drag;
+    flex: 0 0 auto;
+    cursor: pointer; border: none; background: none; border-radius: 4px;
+    font-size: 10px; font-family: 'Consolas', monospace; font-weight: 700;
+    line-height: 1; padding: 3px 3px;
+  }
+  #queueCounts button:hover { background: rgba(219, 234, 254, 0.6); }
+  #queueCounts .sep { flex: 0 0 auto; color: #93a5c4; }
+
+  /**
+   * MUC 103/104/105 - "Làm nổi bật 2 Nút gọi số ưu tiên và Nút gọi số thường": kieu hien thi RIENG,
+   * chi ap dung khi widget.js gan class "prominent" len #queueCounts (che do PRIORITY_MODE=basic -
+   * CHI 2 doi tuong gop "Ưu tiên"/"Đối tượng thường" - xem renderQueueCounts() trong widget.js).
+   *
+   * MUC 105 (doi tu MUC 103/104): theo yeu cau moi nhat "đưa nút Gọi ưu tiên, Gọi thường kế bên nút
+   * Gọi số tiếp theo. Để lại số lượng như cũ thay vì ghi rõ Gọi ưu tiên, Gọi thường":
+   * (1) VI TRI - #queueCounts da duoc DOI CHO trong index.html sang NGAY SAU #actions (nhom 3 nut
+   *     Gọi tiếp theo/Gọi lại/Bỏ qua), khong con nam cuoi thanh widget nua.
+   * (2) NOI DUNG - BO chu nhan "Gọi ưu tiên"/"Gọi thường" (khong con span .qcbLabel/.qcbCount rieng
+   *     nua), CHI hien lai DUNG 1 con so (giong cach hien thi "như cũ" truoc MUC 103) - nhung VAN
+   *     GIU nguyen kieu "khung bao quanh tô màu lên nút" (nen dac mau + chu trang) theo dung yeu cau
+   *     da chot o MUC 104 (nguoi dung LAN NAY chi yeu cau doi vi tri + bo chu, KHONG yeu cau bo mau).
+   * Kich thuoc nut cung thu GON lai (gan bang nut vuong 26x26 trong #actions ben canh) de dung THAT
+   * SU giong nhu "1 nut trong cung nhom" voi Gọi tiếp theo/Gọi lại/Bỏ qua, thay vi 1 khoi to rieng
+   * biet nhu MUC 103/104 truoc day.
+   */
+  #queueCounts.prominent { gap: 3px; }
+  #queueCounts.prominent button.queueCallBig {
+    -webkit-app-region: no-drag;
+    flex: 0 0 auto;
+    cursor: pointer;
+    border-style: solid; border-width: 1.5px; border-radius: 6px;
+    color: #ffffff;
+    display: flex; align-items: center; justify-content: center;
+    min-width: 26px; height: 26px; padding: 0 6px;
+    font-size: 12px; font-weight: 800; font-family: 'Consolas', monospace; line-height: 1;
+    /* Do tuong phan de nhin ro chu trang tren nen mau dam - giup nut noi bat hon nua so voi nen. */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+  #queueCounts.prominent button.queueCallBig:hover { filter: brightness(1.1); }
+
+  #gearBtn, #patientScreenBtn, #logoutBtn, #staffKioskBtn, #priorityOrderBtn, #skippedListBtn {
+    flex: 0 0 auto;
+    background: none; border: none; color: #2563eb; font-size: 13px; cursor: pointer;
+    padding: 2px 3px; line-height: 1; border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #gearBtn:hover, #patientScreenBtn:hover, #staffKioskBtn:hover, #priorityOrderBtn:hover, #skippedListBtn:hover { color: #1d4ed8; background: rgba(219, 234, 254, 0.6); }
+  /* Rieng nut dang xuat to mau CANH BAO (do nhat) khi ru chuot, khac cac nut con lai - vi day la
+     hanh dong CO THE lam mat phien dang lam viec, can noi bat de nhan vien de nhan biet hon. */
+  #logoutBtn:hover { color: #dc2626; background: rgba(254, 226, 226, 0.7); }
+  #patientScreenBtn:disabled, #logoutBtn:disabled, #staffKioskBtn:disabled, #priorityOrderBtn:disabled, #skippedListBtn:disabled { opacity: 0.3; cursor: default; }
+  #patientScreenBtn:disabled:hover, #logoutBtn:disabled:hover, #staffKioskBtn:disabled:hover, #priorityOrderBtn:disabled:hover, #skippedListBtn:disabled:hover { background: none; }
+
+  /**
+   * Nut "Cấp số NHANH" khong qua xac thuc (khong can quet CCCD/nhap thong tin benh nhan) - cap
+   * thang 1 so cho 1 doi tuong bat ky cua he thong, dung LAI DUNG endpoint POST /api/tickets/staff
+   * da co san (giong staff-kiosk.js dung cho nut "Cấp số ngay"), roi in lang le luon bang
+   * print-receipt.js - xem quickIssueTicket() trong widget.js.
+   *
+   * TRUOC DAY day la 8 nut CO DINH trong chinh file HTML nay (mot nut/ma uu tien), khop DUNG 7
+   * doi tuong uu tien + doi tuong thuong dinh nghia trong src/config/priorityRules.js - nhung tu
+   * khi bo sung PRIORITY_MODE (xem file do), so luong doi tuong uu tien co the CHI CON 2 (che do
+   * "basic": Ưu tiên/Đối tượng thường) thay vi 7, nen 8 nut co dinh KHONG con phu hop nua (thua
+   * nut/sai ma). SUA: nut nay nay duoc VE DONG bang JavaScript (xem renderQuickIssueButtons() va
+   * loadPriorityRules() trong widget.js), lay DUNG danh sach + mau + nhan viet tat (`shortLabel`)
+   * tu API /api/priority-rules - TU DONG co du dung so nut cho ca 2 che do (2 nut o che do basic,
+   * 8 nut o che do full) ma khong can sua HTML/CSS gi them khi doi PRIORITY_MODE. Vien mau ngoai
+   * cua tung nut cung LAY THANG tu mau (`color`) cua rule tuong ung (gan qua thuoc tinh style
+   * inline luc render), khong con can 1 rule CSS rieng cho tung ma nhu truoc.
+   */
+  #quickIssueActions { flex: 0 0 auto; display: flex; gap: 3px; flex-wrap: wrap; }
+  #quickIssueActions button {
+    /* Theo yeu cau "widget ngang hãy bắt chước widget dọc": o che do doc moi nut duoc rong het co
+       (width:100%) nen chu 2 ky tu co du cho "tho" - o che do ngang truoc day ep CUNG mot khuon
+       vuong 26x26 (width co dinh) nen nhin chat/khit hon han. Doi width co dinh 26px -> auto +
+       padding ngang (min-width van giu 26px de khong nho hon cac nut vuong khac) de chu duoc "tho"
+       hon 1 chut, giam cam giac chat/dinh vao nhau, ma van giu dung font-size 8px that nho (muc 54). */
+    cursor: pointer; border-radius: 6px; width: auto; min-width: 26px; height: 26px; padding: 0 5px;
+    font-size: 8px; font-weight: 800; letter-spacing: 0.3px; line-height: 1;
+    /* Theo yeu cau "trong suốt hơn nữa" (muc 67) - o che do doc cac nut nay xep chong CHIEM PHAN
+       LON dien tich nhin thay duoc cua widget, nen doi nen dac #ffffff -> rgba trong suot mot phan
+       la noi tac dung ro ret nhat toi cam giac "do dam" tong the cua ca thanh widget. Vien mau
+       ngoai (border-color) duoc GAN INLINE tung nut luc render (xem widget.js), khong dat o day. */
+    background: rgba(255, 255, 255, 0.75);
+    color: #1e3a5f; border-style: solid; border-width: 1.5px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* Hover DUNG CHUNG 1 mau nhat cho MOI nut (thay vi 1 mau hover rieng khop border tung ma nhu
+     truoc) - don gian hoa de khong phai sinh CSS rieng cho tung ma dong tu JS; van du ro de nhan
+     biet dang di chuot qua nut nao. */
+  #quickIssueActions button:hover { background: rgba(226, 232, 240, 0.85); }
+  #quickIssueActions button:disabled { opacity: 0.35; cursor: default; }
+  #quickIssueActions button:disabled:hover { background: rgba(255, 255, 255, 0.75); }
+
+  #statusToast {
+    position: absolute; left: 6px; right: 6px; bottom: 2px;
+    font-size: 9px; color: #b91c1c; text-align: center;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    background: #fef2f2; display: none; pointer-events: none;
+  }
+
+  #emptyState {
+    display: none; width: 100%; height: 100%;
+    align-items: center; justify-content: center; gap: 8px;
+    padding: 0 8px;
+  }
+  #emptyState .muted { font-size: 11px; color: #475569; white-space: nowrap; }
+  #emptyState button {
+    background: #2563eb; color: #fff; border: none; border-radius: 6px;
+    padding: 4px 10px; font-size: 11px; cursor: pointer; white-space: nowrap;
+  }
+
+  /**
+   * CHE DO DOC (moi, theo yeu cau: "hiển thị widget theo chiều dọc làm sao cho nhỏ nhất như hiện
+   * tại chỉ đổi lại là chiều dọc thôi") - class "vertical" duoc gan tren <html> NGAY LUC PHAN TICH
+   * <head> (xem <script> dau file) khi URL co "?orientation=vertical" (electron-widget/main.js tu
+   * gan tham so nay - xem widgetUrl() va setWidgetOrientation() trong main.js, doi qua muc tray
+   * "Hiển thị widget theo chiều dọc"). Y TUONG: XEP LAI dung nhung nhom noi dung/nut da co san (KHONG
+   * them/bot gi) tu THEO HANG NGANG (trai->phai) sang THEO COT DOC (tren->duoi) - be rong widget thu
+   * nho toi da (~1 nut vuong + le), be cao thi du hien het cac nhom (rieng #queueCounts - so luong
+   * cho theo tung doi tuong uu tien - co the len toi 8 nut nen duoc phep TU CUON DOC rieng neu cua
+   * so khong du cao, giong het cach #queueCounts tu cuon NGANG o che do ngang mac dinh).
+   */
+  html.vertical #mainView {
+    flex-direction: column;
+    align-items: stretch;
+    height: auto; min-height: 100%;
+    width: 100%;
+    /* Theo yeu cau: "giảm chiều dài của widget dọc bằng cách thu hẹp khoảng cách giữa các nút" -
+       giam padding tren/duoi cua ca khoi (6px -> 4px moi dau) VA giam khoang cach giua CAC NHOM/NUT
+       xep doc voi nhau (gap 4px -> 2px, giua ~16 phan tu con truc tiep cua #mainView nen tac dung
+       cong don rat ro) - CHI ap dung rieng che do doc (khong dung den gap/padding cua che do ngang
+       o rule goc #mainView, khac boi cach dung thanh 1 hang ngang chu khong xep chong).
+       Theo yeu cau tiep theo: "giảm thêm px chiều dọc cho widget dọc" - giam tiep 1 nac nua: padding
+       4px -> 3px moi dau, gap 2px -> 1px (van giua duoc khoang cach toi thieu de tach biet cac
+       nhom/nut, khong dinh lien hoan toan vao nhau). */
+    padding: 3px 0;
+    white-space: normal;
+    gap: 1px;
+    /* Rieng che do doc: KHONG dung phep cuon ngang moi them o #mainView (chi danh cho che do ngang
+       mac dinh, xem ghi chu o rule #mainView goc) - o che do doc khong co tinh trang tran ngang (moi
+       thu da xep theo cot, width:100%), tran DOC (qua cao) van xu ly nhu cu (resize cua so cao hon,
+       hoac rieng #queueCounts tu cuon doc - xem rule ben duoi), khong can #mainView tu cuon doc. */
+    overflow-x: hidden; overflow-y: visible;
+  }
+  /* Theo phan anh lan 1 ("widget dọc mã quầy Q01 chưa canh giữa"): da thu ep display:block +
+     width:100% + text-align:center, nhung theo phan anh lan 2 kem anh chup phong to ("lệch trái/
+     phải trong khung" - tuc CHU BI DON VE 1 BEN NGAY BEN TRONG chinh cai khung nen xanh nhat cua
+     no, khong phai lech so voi ca thanh widget) thi VAN CHUA dung giua - rat co the do #counterTag
+     van la 1 flex item CUA #mainView (cha no la flex container), nen thuoc tinh `flex: 0 0 auto`
+     khai bao o rule goc (dong ~124) VAN con hieu luc du da ep display:block tai day - flex-basis:
+     auto ket hop flex-shrink:0 trong 1 so truong hop rendering co the khong quy dung 100% chieu
+     rong nhu ky vong, khien "khong gian trong" con lai o trong khung phan bo KHONG DEU 2 ben. De
+     CHAC CHAN 100% du moi truong render nao, DOI CACH TIEP CAN: thay vi dua vao text-align (phu
+     thuoc box co du "khong gian trong" hay khong), bien chinh #counterTag THANH 1 flex container
+     RIENG cho NOI DUNG CUA CHINH NO (display:flex + justify-content:center + align-items:center) -
+     cach nay CAN GIUA tuyet doi, khong phu thuoc flex-basis/text-align cua browser nao ca. */
+  html.vertical #counterTag {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+  }
+  html.vertical #sttNumber { text-align: center; }
+  /* Vach ngan doc: giam margin tren/duoi (2px -> 1px moi dau, nay xuong 0 theo yeu cau "giảm thêm
+     px chiều dọc") - cung nam trong yeu cau thu hep khoang cach giua cac nut, vi vach ngan nam XEN
+     GIUA cac nhom nut nen margin cua no cong don truc tiep vao "khoang cach giua 2 nut/nhom lien
+     ke" ma nguoi dung muon thu hep. Gap 1px cua #mainView (o tren) da du de tach vach ngan voi cac
+     phan tu ke ben, khong can them margin rieng cua chinh vach ngan nua. */
+  html.vertical .sep-line { width: 100%; height: 1px; align-self: auto; margin: 0; }
+  /* Actions (3 nut goi so): giam tiep gap 2px -> 1px, VA giam kich thuoc tung nut 26x26 -> 24x24
+     (van du cho icon 13px + le, chi giam bot khoang "dem" thua quanh icon) - theo yeu cau "giảm
+     thêm px chiều dọc cho widget dọc", CHI ap dung rieng che do doc qua rule nay. */
+  html.vertical #actions { flex-direction: column; align-items: center; gap: 1px; }
+  html.vertical #actions button { width: 24px; height: 24px; }
+  html.vertical #queueCounts {
+    /* Giam khoang cach giua cac dong so luong cho (2px -> 1px, nay xuong 0 theo yeu cau moi nhat) -
+       danh muc nay co the len toi 8 dong nen giam duoc chut it cung cong don dang ke vao tong
+       chieu dai. */
+    gap: 0;
+    /* Rieng che do doc: KHOI PHUC lai flex:1 1 auto + min-height:0 (khac voi mac dinh flex:0 0 auto
+       moi doi o che do ngang - xem ghi chu o rule #queueCounts goc) - o che do doc, #queueCounts CAN
+       tu gian de LAP DAY khoang trong con lai trong cot doc VA tu co lai (min-height:0) de co the tu
+       cuon DOC RIENG (overflow-y:auto ben duoi) khi khong du cao hien het toi da 8 doi tuong, dung y
+       nhu thiet ke ban dau cua che do doc (muc 49) - hanh vi nay khac hoan toan voi viec "co lai cac
+       nut" o che do ngang (khong lien quan gi nhau: o day CHI co CONTAINER tu co/cuon, tung nut BEN
+       TRONG van giu nguyen kich thuoc, khong bi bop nho). */
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  html.vertical #queueCounts .sep { display: none; } /* dau "/" ngan cach ngang - khong can nua khi da xep tung dong rieng */
+  html.vertical #queueCounts button { width: 100%; text-align: center; }
+  /* MUC 105: che do doc cua 2 nut "noi bat" (xem rule #queueCounts.prominent o tren) - CHI hien 1
+     con so (khong con chu nhan) nen GIU kich thuoc VUONG NHO nhu 1 nut trong nhom #actions ben canh
+     (24x24, giong het rule "html.vertical #actions button" o tren) thay vi rong het co (100%) nhu
+     rule chung "html.vertical #queueCounts button" - xep 2 nut nay NGANG voi nhau (khong xep chong
+     doc) de nhin giong "cung 1 hang nut" voi nhom Gọi tiếp theo/Gọi lại/Bỏ qua o tren. */
+  html.vertical #queueCounts.prominent { flex-direction: row; justify-content: center; width: 100%; }
+  html.vertical #queueCounts.prominent button.queueCallBig { width: auto; min-width: 24px; height: 24px; padding: 0 5px; }
+  html.vertical #gearBtn, html.vertical #patientScreenBtn, html.vertical #logoutBtn,
+  html.vertical #staffKioskBtn, html.vertical #priorityOrderBtn, html.vertical #skippedListBtn {
+    width: 100%;
+  }
+  html.vertical #quickIssueActions {
+    flex-direction: column; width: 100%;
+    /* Giam khoang cach giua 8 nut cap so nhanh khi xep doc (gap goc 3px o rule chung cho ca 2 che
+       do, dung o day de KHONG anh huong che do ngang) - day la 1 trong nhung nhom nhieu nut nhat
+       (8 nut) nen giam gap la noi tac dung ro nhat toi tong chieu dai widget doc.
+       Theo yeu cau tiep theo "giảm thêm px chiều dọc": giam tiep gap 2px -> 1px. */
+    gap: 1px;
+  }
+  /* Cung theo yeu cau "giảm thêm px chiều dọc": giam chieu cao tung nut cap so nhanh (26px -> 22px,
+     rule goc #quickIssueActions button dung chung cho ca 2 che do van la 26px cho che do ngang) -
+     day la nhom 8 nut nen giam 4px/nut cong don duoc kha nhieu (toi da ~32px) rieng cho che do doc,
+     KHONG anh huong che do ngang. */
+  html.vertical #quickIssueActions button { width: 100%; height: 22px; }
+  html.vertical #emptyState { flex-direction: column; padding: 8px 4px; }
+  html.vertical #emptyState .muted { white-space: normal; text-align: center; }
+  html.vertical #statusToast { left: 2px; right: 2px; white-space: normal; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div id="mainView">
+    <span id="counterTag" class="no-drag" title="Mã quầy">--</span>
+    <span id="sttNumber" title="Số đang phục vụ">---</span>
+    <span class="sep-line"></span>
+    <span id="actions">
+      <button id="btnNext" class="no-drag" title="Gọi số tiếp theo" onclick="callNext()"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <button id="btnRecall" class="no-drag" title="Gọi lại số hiện tại" onclick="reCall()"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></button>
+      <button id="btnSkip" class="no-drag" title="Bỏ qua (vắng mặt)" onclick="skip()"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l8 8-8 8"/><path d="M18 4v16"/></svg></button>
+    </span>
+    <!-- MUC 105: theo yeu cau "đưa nút Gọi ưu tiên, Gọi thường kế bên nút Gọi số tiếp theo" - da
+         DOI VI TRI #queueCounts tu cuoi thanh widget (canh priorityOrderBtn/skippedListBtn) sang
+         NGAY SAU #actions (nhom nut Gọi tiếp theo/Gọi lại/Bỏ qua) - xem renderQueueCounts() trong
+         widget.js. CHI hien noi dung (2 nut to, mau dac) o che do "basic"; che do "full" van AN
+         HOAN TOAN nhu MUC 104 (khong doi vi tri gi vi khong hien thi). -->
+    <span id="queueCounts" class="no-drag"></span>
+    <span class="sep-line"></span>
+    <button id="patientScreenBtn" class="no-drag" title="Mở màn hình bệnh nhân (tự động toàn màn hình ở màn hình phụ nếu có)" onclick="openPatientScreen()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></button>
+    <!-- Nut moi: "Đăng xuất nhanh" - 1 bam de VUA thoat phien quay hien tai (giai phong quay cho
+         ca sau) VUA dong luon cua so man hinh benh nhan dang mo (neu co), xem logoutCounter() trong
+         widget.js. Dat NGAY CANH nut man hinh benh nhan vi 2 nut nay lien quan truc tiep (dong mo
+         cung 1 thu). -->
+    <button id="logoutBtn" class="no-drag" title="Đăng xuất khỏi quầy hiện tại &amp; đóng màn hình bệnh nhân" onclick="logoutCounter()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+    <!-- Nut moi: mo THANG kiosk cap so - Nhan vien (/staff-kiosk) - khong phu thuoc quay nao dang
+         chon (nhan vien co the cap so cho benh nhan bat ky luc nao, khong can chon quay truoc), nen
+         KHONG disable theo counterId nhu 2 nut ben canh. Trong Electron mo qua widgetBridge (xem
+         openStaffKiosk() trong widget.js) de in lang le hoat dong duoc; ngoai Electron mo tab moi. -->
+    <button id="staffKioskBtn" class="no-drag" title="Mở kiosk cấp số – Nhân viên (/staff-kiosk)" onclick="openStaffKiosk()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M6 16c0-1.7 1.3-3 3-3s3 1.3 3 3"/><line x1="14" y1="8" x2="18" y2="8"/><line x1="14" y1="12" x2="18" y2="12"/></svg></button>
+    <!-- MUC 104: cum "Cấp số nhanh" (#quickIssueActions) BI AN VINH VIEN o CA 2 CHE DO (full lan
+         basic) - xem renderQuickIssueButtons() trong widget.js (luon luon an). Giu lai element rong
+         nay CHI de khong phai sua lai cac cho khac trong widget.js con tham chieu els.quickIssueActions. -->
+    <span id="quickIssueActions" class="no-drag" style="display:none"></span>
+    <span class="sep-line"></span>
+    <!-- 2 nut moi: "dan" thang sang dung modal tren trang /counter day du (xem openSettings(openTarget)
+         trong widget.js va createSettingsWindow(openTarget) trong electron-widget/main.js) - widget
+         qua nho de nhet nguyen khoi keo-tha thu tu uu tien/danh sach bo qua ngay tai day. -->
+    <button id="priorityOrderBtn" class="no-drag" title="Thứ tự ưu tiên gọi số của quầy này" onclick="openSettings('priority-order')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></button>
+    <button id="skippedListBtn" class="no-drag" title="Xem danh sách số bị bỏ qua (vắng mặt)" onclick="openSettings('skipped')"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></button>
+    <span class="sep-line"></span>
+    <button id="gearBtn" class="no-drag" title="Mở màn hình quản lý đầy đủ" onclick="openSettings()"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  </div>
+
+  <div id="emptyState">
+    <span class="muted">Chưa chọn quầy</span>
+    <button class="no-drag" onclick="openSettings()">Chọn quầy</button>
+  </div>
+
+  <div id="statusToast" class="no-drag"></div>
+</div>
+
+<script src="/vendor/ui-dialog.js"></script>
+<script src="/vendor/rt-client.js"></script>
+<script src="/print-receipt.js"></script>
+<script src="widget.js"></script>
+</body>
+</html>

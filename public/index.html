@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<!-- co dinh giao dien tren dien thoai/may tinh bang - khong cho pinch-zoom/double-tap-zoom (xem
+     giai thich chi tiet trong public/staff-kiosk/index.html, ap dung dong nhat cho moi trang). -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Hệ thống bắt số</title>
+<link rel="stylesheet" href="/common.css" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#f3f6fb" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Hệ thống bắt số" />
+<meta name="mobile-web-app-capable" content="yes" />
+<style>
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+  .choices { display:flex; gap:20px; flex-wrap:wrap; justify-content:center; max-width:880px; }
+  .choice-card {
+    width: 260px; text-align:center; cursor:pointer; transition: border-color .15s, box-shadow .15s;
+    border: 1px solid var(--border);
+  }
+  .choice-card:hover { border-color: var(--primary); box-shadow: 0 2px 14px rgba(37,99,235,0.12); }
+  .choice-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  /* MUC 114 - icon mau cho tung muc menu (SVG noi tuyen, khong can thu vien/mang ngoai) */
+  .choice-icon {
+    width: 60px; height: 60px; margin: 2px auto 12px; border-radius: 16px; display: flex;
+    align-items: center; justify-content: center; background: var(--ib); color: var(--ic);
+    transition: transform .15s, background .15s, color .15s;
+  }
+  .choice-icon svg { width: 30px; height: 30px; }
+  .choice-card:hover .choice-icon { transform: translateY(-2px) scale(1.06); background: var(--ic); color: #fff; }
+  .choice-card:active .choice-icon { transform: scale(.96); }
+  .choices { margin-top: 10px; }
+  /* Dien thoai/man hep: 2 the moi hang, icon nho lai cho gon */
+  @media (max-width: 600px) {
+    .choices { gap: 12px; }
+    .choice-card { width: calc(50% - 6px); box-sizing: border-box; padding: 16px 10px; }
+    .choice-title { font-size: 15px; }
+    .choice-icon { width: 48px; height: 48px; border-radius: 14px; margin-bottom: 8px; }
+    .choice-icon svg { width: 24px; height: 24px; }
+  }
+  #loginBox { display:none; margin-top: 20px; }
+  #loginError { color: var(--danger); font-size: 14px; margin-top: 8px; min-height: 18px; }
+
+  .net-url-row {
+    display:flex; align-items:center; gap:8px; background:var(--bg-soft); border:1px solid var(--border);
+    border-radius:8px; padding:10px 12px; margin-top:8px;
+  }
+  .net-url-text { flex:1; font-family:monospace; font-size:15px; color:var(--text); word-break:break-all; }
+  .net-copy-btn { padding:6px 10px; font-size:13px; }
+  #netQrImg { display:block; margin:14px auto 0; border-radius:8px; background:#fff; padding:8px; }
+
+  /**
+   * MOI (theo yeu cau): "bổ sung thêm 1 nút thoát App ở màn hình localhost:4000". Trang nay ("/")
+   * chinh la noi nut "Trang chủ" cua /kiosk VA /staff-kiosk dua nguoi dung ve (xem home-link trong
+   * 2 trang do) - nen CO THE dang hien that su BEN TRONG kioskWindow/staffKioskWindow cua widget
+   * (toan man hinh, khong vien cua so/taskbar nao tren man hinh cam ung), luc do khong con cach nao
+   * de thoat han ung dung ngoai tray. Nut nay dat GOC TREN-PHAI (doi xung voi vi tri "Trang chủ" o
+   * goc tren-trai cua cac man hinh khac), TAI SU DUNG dung style .home-link co san trong common.css
+   * - CHI hien khi dang chay trong Electron (kiem tra `window.widgetBridge` luc tai trang, xem script
+   * cuoi file), an hoan toan khi mo bang trinh duyet thuong (khong co gi de "thoát ứng dụng" ca).
+   */
+  #exitAppLink { left: auto; right: 14px; display: none; }
+</style>
+</head>
+<body>
+<div class="wrap" style="text-align:center;">
+  <!-- Chi hien khi chay trong widget Electron (xem initExitAppButton() o cuoi file) - KHONG dung
+       window.confirm() de hoi xac nhan (cung 1 ly do da sua o public/staff-kiosk/staff-kiosk.js -
+       xem README mục 108: hộp thoại native co the khong tra lai OS-focus cho cua so trong Electron)
+       ma dung 1 modal DOM thuan tuy (#exitAppModal ben duoi). -->
+  <a href="#" id="exitAppLink" class="home-link" title="Thoát ứng dụng" aria-label="Thoát ứng dụng"
+     onclick="event.preventDefault(); openExitAppModal();">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+  </a>
+  <div id="exitAppModal" style="display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); align-items:center; justify-content:center; z-index:99999; padding:20px;">
+    <div class="card" style="max-width:380px; text-align:center;">
+      <div class="sub" style="margin-bottom:18px;">
+        Xác nhận THOÁT ứng dụng? Toàn bộ màn hình cấp số/bốc số đang mở trên máy này (kể cả cửa sổ
+        đang ẩn trong khay hệ thống) sẽ đóng lại hoàn toàn.
+      </div>
+      <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+        <button class="btn-secondary" onclick="closeExitAppModal()">Huỷ</button>
+        <button class="btn-danger" onclick="confirmExitApp()">Thoát ứng dụng</button>
+      </div>
+    </div>
+  </div>
+  <!-- Logo + ten don vi lay tu .env (KIOSK_LOGO_IMAGE, CLINIC_NAME qua /api/branding) - dung chung
+       script public/branding-header.js (id co dinh appBrandIcon/appLogoImg/appClinicName), thay vi
+       icon "chu thap y te" chung chung + chu "Hệ thống bắt số" co dinh nhu truoc. Man hinh nay la
+       noi nut Home o /kiosk dua nhan vien ve (xem requestStaffExit() trong kiosk.js), nen can dong
+       bo thuong hieu voi cac man hinh khac (kiosk, waiting-screen, patient-screen). -->
+  <h1 style="justify-content:center; align-items:center; display:flex;">
+    <span class="brand-mark" id="appBrandIcon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor">
+        <path d="M10 2h4v6h6v4h-6v6h-4v-6H4V8h6V2z" />
+      </svg>
+    </span>
+    <img id="appLogoImg" class="brand-logo-img" style="display:none" alt="Logo" />
+    <span id="appClinicName">Đang tải...</span>
+  </h1>
+  <div class="choices">
+    <div class="card choice-card" onclick="location.href='/kiosk'">
+      <div class="choice-icon" style="--ic:#16a34a;--ib:#dcfce7;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
+      <div class="choice-title">Bệnh nhân</div>
+      <div class="muted">Bốc số thứ tự tại kiosk</div>
+    </div>
+    <div class="card choice-card" onclick="showStaffLogin()">
+      <div class="choice-icon" style="--ic:#2563eb;--ib:#dbeafe;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M15 8h2"/><path d="M15 12h2"/><path d="M6 16a3 3 0 0 1 6 0"/></svg></div>
+      <div class="choice-title">Nhân viên</div>
+      <div class="muted">Quản lý gọi số tại quầy tiếp nhận</div>
+    </div>
+  </div>
+
+  <div id="loginBox" class="card grid" style="max-width:320px; margin-left:auto; margin-right:auto; display:none;">
+    <!-- Che do mac dinh: cho quet ma QR (danh cho may khong co ban phim vat ly nhu kiosk/TV) -->
+    <div id="loginModeQr">
+      <div class="sub" style="margin-bottom:8px;">Đưa mã QR đăng nhập vào máy quét để tự động đăng nhập.</div>
+      <div class="muted" id="qrWaitingStatus">Đang chờ quét mã QR...</div>
+      <button class="btn-secondary" style="margin-top:14px; width:100%;" onclick="switchLoginMode('manual')">Nhập mật khẩu thủ công</button>
+    </div>
+    <!-- Che do go tay: danh cho may co ban phim - vong lap tu focus o quet QR TAM DUNG hoan toan
+         khi o che do nay, tranh cuop focus khoi o mat khau (loi da gap truoc day). -->
+    <div id="loginModeManual" style="display:none;">
+      <input type="password" id="staffPassword" placeholder="Mật khẩu" autocomplete="current-password" />
+      <button class="btn-primary" style="width:100%; margin-top:10px;" onclick="staffLogin()">Đăng nhập</button>
+      <div id="loginError"></div>
+      <button class="btn-secondary" style="margin-top:6px; width:100%;" onclick="switchLoginMode('qr')">Quét mã QR để đăng nhập</button>
+    </div>
+  </div>
+
+  <!-- Theo yeu cau: bo het cac dong ghi chu (.muted) duoi moi nut o day, chi con dung ten nut da
+       doi ("choice-title") cho gon gang - hanh vi bam (onclick) giu nguyen khong doi. -->
+  <div id="staffMenuBox" class="choices" style="display:none;">
+    <div class="card choice-card" onclick="location.href='/counter'">
+      <div class="choice-icon" style="--ic:#2563eb;--ib:#dbeafe;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg></div>
+      <div class="choice-title">Tiếp nhận gọi số</div>
+    </div>
+    <div class="card choice-card" onclick="location.href='/staff-kiosk'">
+      <div class="choice-icon" style="--ic:#7c3aed;--ib:#ede9fe;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg></div>
+      <div class="choice-title">Nhân viên hỗ trợ cấp số</div>
+    </div>
+    <!-- MUC 98 - man hinh moi "In lại phiếu số thứ tự" (staff-printer) - in lai phieu DA CAP
+         truoc do (khong cap so moi), xem public/staff-printer/. -->
+    <div class="card choice-card" onclick="location.href='/staff-printer'">
+      <div class="choice-icon" style="--ic:#0891b2;--ib:#cffafe;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></div>
+      <div class="choice-title">In lại phiếu số thứ tự</div>
+    </div>
+    <div class="card choice-card" onclick="location.href='/kiosk'">
+      <div class="choice-icon" style="--ic:#16a34a;--ib:#dcfce7;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><path d="M7 12h10"/></svg></div>
+      <div class="choice-title">Bệnh nhân tự cấp số</div>
+    </div>
+    <!-- Dung THE <a target="..."> THAT (khong con qua window.open() trong onclick) de dam bao LUON
+         mo o 1 CUA SO/TAB MOI mot cach dang tin cay nhat co the tren moi trinh duyet (kha nang bi
+         trinh chan popup can thiep gan nhu bang khong voi the <a> co target, khac voi goi
+         window.open() tu JS van co the bi vai trinh duyet/tien ich chan trong 1 so truong hop). Van
+         giu chung 1 "target" co dinh (ten cua so) giong window.open() truoc day - bam lai se dua ra
+         truoc cua so DA MO thay vi mo them cai moi. -->
+    <a class="card choice-card" href="/waiting-screen/" target="waiting-screen" rel="noopener"
+       style="display:block; text-decoration:none; color:inherit;">
+      <div class="choice-icon" style="--ic:#ea580c;--ib:#ffedd5;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg></div>
+      <div class="choice-title">Xem tất cả quầy đang phục vụ</div>
+    </a>
+    <div class="card choice-card" onclick="openPatientScreenFromMenu()">
+      <div class="choice-icon" style="--ic:#db2777;--ib:#fce7f3;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="m17 2-5 5-5-5"/></svg></div>
+      <div class="choice-title">Xem quầy đang phục vụ</div>
+    </div>
+    <div class="card choice-card" onclick="openLoginQrModal()">
+      <div class="choice-icon" style="--ic:#ca8a04;--ib:#fef9c3;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></svg></div>
+      <div class="choice-title">QR đăng nhập</div>
+    </div>
+    <div class="card choice-card" onclick="toggleNetInfo()">
+      <div class="choice-icon" style="--ic:#0d9488;--ib:#ccfbf1;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01"/><path d="M6 18h.01"/></svg></div>
+      <div class="choice-title">QR máy chủ</div>
+    </div>
+    <div class="card choice-card" onclick="location.href='/counter-admin'">
+      <div class="choice-icon" style="--ic:#475569;--ib:#e2e8f0;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
+      <div class="choice-title">Quản lý quầy tiếp nhận</div>
+    </div>
+  </div>
+
+  <!-- "Dia chi mang" CHI xem duoc SAU KHI dang nhap (yeu cau bao mat) - dat trong staffMenuBox,
+       API /api/server-info cung yeu cau dang nhap o phia server (xem src/routes/serverInfo.js). -->
+  <div id="netInfoBox" class="card" style="display:none; max-width:420px; margin:16px auto 0; text-align:left;">
+    <div class="muted" style="margin-bottom:4px;">
+      Dùng để mở hệ thống này trên <b>máy tính khác</b> (gõ địa chỉ vào trình duyệt) hoặc
+      <b>điện thoại cá nhân</b> (quét mã QR) — chỉ hoạt động khi cùng chung mạng Wi-Fi/LAN với
+      máy đang chạy máy chủ này.
+    </div>
+    <div id="netUrlList"></div>
+    <img id="netQrImg" style="display:none;" width="180" height="180" alt="Mã QR địa chỉ máy chủ" />
+    <div class="muted" id="netQrCaption" style="display:none; text-align:center; margin-top:6px; font-size:13px;">
+      Quét bằng camera điện thoại để mở nhanh
+    </div>
+  </div>
+
+  <!-- Input an, luon focus san (kieu ban phim - keyboard wedge) de may kiosk/TV khong co ban
+       phim vat ly co the "quet QR de dang nhap" thay vi go tay - xem scanLoginInput ben duoi.
+       Theo phan anh: "màn hình cảm ứng nó cứ hiện bàn phím ảo... tôi chỉ quét thôi k có cần hiện
+       bàn phím ảo" - o man hinh cam ung (touchscreen), TRINH DUYET/HE DIEU HANH tu dong bat ban
+       phim ao MOI KHI 1 the <input type="text"> duoc focus() bang JS, BAT KE co dang bi an bang
+       CSS hay khong (opacity:0/pointer-events:none CHI an ve MAT, khong lien quan gi toi logic
+       bat ban phim ao cua he dieu hanh/trinh duyet) - vi input nay CHI danh cho may quet QR (hoat
+       dong nhu 1 ban phim VAT LY that qua cong USB/Bluetooth, kieu "keyboard wedge", tu go ky tu +
+       Enter vao dung o dang focus) chu KHONG danh cho nguoi dùng tu go tay, nen them thuoc tinh
+       `inputmode="none"` - day la tin hieu CHUAN (duoc Chrome/Edge tren Windows/Android ho tro) de
+       trinh duyet KHONG tu bat ban phim ao khi input duoc focus, nhung VAN nhan binh thuong moi su
+       kien ban phim tu thiet bi VAT LY (may quet) gui toi - khong anh huong gi den chuc nang quet
+       QR ca. -->
+  <input id="scanLoginInput" type="text" autocomplete="off" inputmode="none"
+    style="position:absolute; top:0; left:0; width:1px; height:1px; opacity:0; pointer-events:none;" />
+
+  <div id="loginQrModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index:50;">
+    <div class="card" style="max-width:360px; text-align:center;">
+      <div class="sub" style="margin-bottom:8px;">
+        Mã QR đăng nhập nhanh — quét mã này vào bất kỳ đâu trên màn hình đăng nhập của máy kiosk
+        (không cần chạm/gõ gì thêm) để tự động đăng nhập.
+      </div>
+      <div id="loginQrStatus" class="muted">Đang tạo mã...</div>
+      <img id="loginQrImg" style="display:none; margin:12px auto 0; border-radius:8px; background:#fff; padding:10px;" width="240" height="240" alt="Mã QR đăng nhập nhanh" />
+      <div style="display:flex; gap:10px; justify-content:center; margin-top:16px;">
+        <button class="btn-secondary" onclick="window.print()">In</button>
+        <button class="btn-secondary" onclick="closeLoginQrModal()">Đóng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/vendor/ui-dialog.js"></script>
+<script src="/branding-header.js"></script>
+<script src="/vendor/scanner-buffer.js"></script>
+<script>
+  /**
+   * "Xem quầy đang phục vụ" tu man hinh chon vai tro - dung CHUNG quay da chon gan nhat luu trong
+   * localStorage (key "counterId", chia se voi trang /counter va widget Electron vi cung origin).
+   * Neu chua tung chon quay nao (localStorage rong) thi khong biet mo man hinh cua quay nao - nhac
+   * nhan vien sang "Tiếp nhận gọi số" chon quay truoc thay vi mo 1 trang loi "không tìm thấy quầy".
+   * Van dung window.open() (khong chuyen sang the <a>) vi can kiem tra dieu kien + hien alert
+   * TRUOC khi biet duoc URL that su can mo - "Xem tất cả quầy đang phục vụ" ben canh (khong can
+   * dieu kien gi) da chuyen sang the <a target="..."> that de mo cua so moi dang tin cay hon.
+   */
+  function openPatientScreenFromMenu() {
+    const counterId = localStorage.getItem('counterId');
+    if (!counterId) {
+      UiDialog.alert('Chưa chọn quầy nào. Vui lòng vào "Tiếp nhận gọi số" để chọn quầy trước, sau đó quay lại đây.');
+      return;
+    }
+    const win = window.open(`/patient-screen/?counter=${counterId}`, `patient-screen-${counterId}`);
+    if (win) win.focus();
+  }
+</script>
+<script>
+  // Che do dang nhap hien tai: 'qr' (mac dinh, danh cho may khong co ban phim) hoac 'manual'
+  // (nguoi dung tu chon khi can go tay mat khau). Vong lap focusLoginScanner() ben duoi CHI cuop
+  // focus ve o quet QR khi dang o che do 'qr' - hoan toan khong dung lai lam gi khi o che do
+  // 'manual', tranh loi cu (o mat khau tu mat focus giua chung khi dang go).
+  let loginMode = 'qr';
+
+  function switchLoginMode(mode) {
+    loginMode = mode;
+    const qrBox = document.getElementById('loginModeQr');
+    const manualBox = document.getElementById('loginModeManual');
+    if (mode === 'manual') {
+      qrBox.style.display = 'none';
+      manualBox.style.display = 'block';
+      document.getElementById('loginError').textContent = '';
+      document.getElementById('staffPassword').focus();
+    } else {
+      manualBox.style.display = 'none';
+      qrBox.style.display = 'block';
+    }
+  }
+
+  function showStaffLogin() {
+    document.querySelector('.choices').style.display = 'none';
+    document.getElementById('loginBox').style.display = 'grid';
+    switchLoginMode('qr');
+  }
+
+  // Duong dan can dua nguoi dung ve SAU KHI dang nhap thanh cong - do middleware server gan vao
+  // (giu nguyen ven duong dan + query goc, vi du "/patient-screen/?counter=3") khi redirect ve
+  // day do chua dang nhap. CHI chap nhan gia tri bat dau bang "/" va KHONG bat dau bang "//" (de
+  // tranh "open redirect" sang domain la, vi du "?next=//evil.com").
+  function getSafeNextTarget() {
+    const raw = new URLSearchParams(location.search).get('next');
+    if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
+    return null;
+  }
+
+  async function staffLogin(passwordOverride) {
+    const passwordInput = document.getElementById('staffPassword');
+    const password = passwordOverride != null ? passwordOverride : passwordInput.value;
+    const errBox = document.getElementById('loginError');
+    errBox.textContent = '';
+    try {
+      const res = await fetch('/api/auth/staff-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        errBox.textContent = data.error || 'Sai mật khẩu, vui lòng thử lại.';
+        return;
+      }
+      // Neu bi redirect ve day tu 1 trang cu the (bam thang link, hoac may kiosk tu dieu huong
+      // ve day luc chua dang nhap) thi vao thang trang do sau khi dang nhap thanh cong. Con neu
+      // chi bam "Nhân viên" tu trang chu (khong co dich cu the) thi cho chon man hinh can dung.
+      const target = getSafeNextTarget();
+      if (target) {
+        location.href = target;
+      } else {
+        document.getElementById('loginBox').style.display = 'none';
+        document.getElementById('staffMenuBox').style.display = 'flex';
+      }
+    } catch (err) {
+      errBox.textContent = 'Không kết nối được máy chủ, vui lòng thử lại.';
+    }
+  }
+
+  document.getElementById('staffPassword')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') staffLogin();
+  });
+
+  /**
+   * Kiem tra ngay khi tai trang xem da co phien dang nhap con hieu luc hay chua (cookie
+   * staff_token con han) - neu co roi thi vao thang staffMenuBox (hoac dieu huong toi ?next=
+   * neu co) thay vi bat nguoi dung dang nhap lai tu dau. Giai quyet tinh trang bam icon "trang
+   * chu" tu 1 man hinh nhan vien khac lai bi doi dang nhap lai gay kho chiu.
+   */
+  async function checkExistingSession() {
+    const target = getSafeNextTarget();
+    try {
+      const res = await fetch('/api/auth/staff-status');
+      const data = await res.json();
+      if (data.authenticated) {
+        if (target) {
+          location.href = target;
+        } else {
+          document.querySelector('.choices').style.display = 'none';
+          document.getElementById('loginBox').style.display = 'none';
+          document.getElementById('staffMenuBox').style.display = 'flex';
+        }
+        return;
+      }
+    } catch {
+      // Khong kiem tra duoc trang thai dang nhap (mat mang...) -> coi nhu chua dang nhap, hien
+      // man hinh chon vai tro/dang nhap binh thuong ben duoi.
+    }
+    // Chua dang nhap: neu bi middleware server redirect ve day do truy cap 1 link duoc bao ve,
+    // tu mo san khung dang nhap cho tien.
+    if (target) showStaffLogin();
+  }
+  checkExistingSession();
+
+  /**
+   * "Dang nhap qua QR" - danh cho may kiosk/TV khong co ban phim vat ly. Input an nay LUON duoc
+   * focus san (kieu ban phim - keyboard wedge, giong het co che dung o kiosk.js/staff-kiosk.js)
+   * de may quet QR USB/tich hop "go" noi dung ma no quet duoc vao day roi tu bam Enter. Neu noi
+   * dung quet duoc dung la mat khau nhan vien thi dang nhap thanh cong ngay, khong can cham/go
+   * gi ca - xem mã QR tuong ung tai openLoginQrModal() (chi xem duoc sau khi da dang nhap it
+   * nhat 1 lan bang cach go tay tren 1 may co ban phim).
+   *
+   * CHU Y: khi nguoi dung da CHU DONG chon che do "Nhập mật khẩu thủ công" (loginMode === 'manual'),
+   * vong lap nay DUNG HOAN TOAN viec cuop focus - khong con canh tranh voi o mat khau nua (loi cu:
+   * o mat khau tu mat focus giua chung do heuristic dua vao thoi gian go phim khong dang tin cay).
+   */
+  const scanLoginInput = document.getElementById('scanLoginInput');
+  function focusLoginScanner() {
+    if (loginMode !== 'qr') return;
+    if (document.getElementById('loginQrModal').style.display === 'flex') return;
+    scanLoginInput?.focus({ preventScroll: true });
+  }
+  setInterval(focusLoginScanner, 800);
+  focusLoginScanner();
+
+  // Dung ScannerBuffer (public/vendor/scanner-buffer.js) thay vi lang nghe Enter truc tiep - mot
+  // so may quet co ty le gui nham 1 Enter GIUA CHUNG noi dung, khien xu ly nham 1 chuoi bi cat cut.
+  // Ma dang nhap nhanh khong co dinh dang co dinh de kiem tra "du hop le" nen dung mac dinh
+  // isComplete (luon coi la du khi co Enter), van huong loi tu co che du phong theo thoi gian
+  // (idle/reset) cho truong hop may quet khong gui Enter/Enter bi mat.
+  if (scanLoginInput && window.ScannerBuffer) {
+    window.ScannerBuffer.attach(scanLoginInput, {
+      onComplete: (scanned) => {
+        showStaffLogin();
+        staffLogin(scanned);
+      },
+    });
+  } else {
+    scanLoginInput?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const scanned = scanLoginInput.value.trim();
+      scanLoginInput.value = '';
+      if (!scanned) return;
+      showStaffLogin();
+      staffLogin(scanned);
+    });
+  }
+
+  /** Modal xem/in ma QR dang nhap nhanh - chi goi duoc API khi da dang nhap (server tu kiem tra). */
+  async function openLoginQrModal() {
+    const modal = document.getElementById('loginQrModal');
+    const statusEl = document.getElementById('loginQrStatus');
+    const img = document.getElementById('loginQrImg');
+    modal.style.display = 'flex';
+    img.style.display = 'none';
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Đang tạo mã...';
+    try {
+      const res = await fetch('/api/auth/login-qr');
+      const data = await res.json();
+      if (!res.ok || !data.qr) {
+        statusEl.textContent = data.error || 'Không tạo được mã QR, vui lòng thử lại.';
+        return;
+      }
+      img.src = data.qr;
+      img.style.display = 'block';
+      statusEl.style.display = 'none';
+    } catch {
+      statusEl.textContent = 'Không kết nối được máy chủ, vui lòng thử lại.';
+    }
+  }
+
+  function closeLoginQrModal() {
+    document.getElementById('loginQrModal').style.display = 'none';
+  }
+
+  /**
+   * "Dia chi mang LAN" - CHI xem duoc SAU KHI dang nhap (bam the "QR máy chủ" trong
+   * staffMenuBox), giup nhan vien dang dung MAY CHU (may dang chay npm start, tren man hinh nay
+   * dang mo bang "localhost") tim duoc dia chi IP cua no de:
+   *  1) Doc/go lai dia chi nay tren cac may tinh khac (quay tiep nhan) trong cung mang, vi
+   *     "localhost" chi hoat dong tren dung may dang chay server.
+   *  2) Quet ma QR bang dien thoai ca nhan de mo nhanh, khong can go tay.
+   * API /api/server-info cung yeu cau dang nhap o phia server (khong chi an o giao dien).
+   */
+  let netInfoLoaded = false;
+  async function toggleNetInfo() {
+    const box = document.getElementById('netInfoBox');
+    const isHidden = box.style.display === 'none' || !box.style.display;
+    box.style.display = isHidden ? 'block' : 'none';
+    if (isHidden && !netInfoLoaded) await loadNetInfo();
+  }
+
+  async function loadNetInfo() {
+    const listEl = document.getElementById('netUrlList');
+    listEl.innerHTML = '<div class="muted">Đang tải...</div>';
+    try {
+      const res = await fetch('/api/server-info');
+      const data = await res.json();
+      netInfoLoaded = true;
+
+      if (!data.urls || data.urls.length === 0) {
+        listEl.innerHTML =
+          '<div class="muted">Không phát hiện được địa chỉ mạng LAN nào trên máy này ' +
+          '(có thể máy chưa kết nối Wi-Fi/dây mạng). Vẫn có thể dùng "localhost" trên chính máy này.</div>';
+        return;
+      }
+
+      listEl.innerHTML = data.urls
+        .map(
+          (url, idx) => `<div class="net-url-row">
+            <span class="net-url-text">${url}</span>
+            <button class="btn-secondary net-copy-btn" onclick="copyNetUrl('${url}', ${idx})" id="netCopyBtn${idx}">Sao chép</button>
+          </div>`
+        )
+        .join('');
+
+      if (data.qr) {
+        const img = document.getElementById('netQrImg');
+        img.src = data.qr;
+        img.style.display = 'block';
+        document.getElementById('netQrCaption').style.display = 'block';
+      }
+    } catch (err) {
+      listEl.innerHTML = '<div class="muted">Không tải được thông tin mạng, vui lòng thử lại.</div>';
+    }
+  }
+
+  async function copyNetUrl(url, idx) {
+    const btn = document.getElementById(`netCopyBtn${idx}`);
+    try {
+      await navigator.clipboard.writeText(url);
+      const old = btn.textContent;
+      btn.textContent = 'Đã sao chép';
+      setTimeout(() => (btn.textContent = old), 1500);
+    } catch {
+      // Trinh duyet chan clipboard API (vi du khong phai HTTPS) -> bo qua, nguoi dung tu bo den
+      UiDialog.alert('Không sao chép được tự động, vui lòng bôi đen và sao chép thủ công: ' + url);
+    }
+  }
+</script>
+<script>
+  /**
+   * "Thoát ứng dụng" - CHI hien nut/hoat dong khi trang nay dang chay THAT SU ben trong widget
+   * Electron (`window.widgetBridge` do electron-widget/preload.js "lộ ra" qua contextBridge - KHONG
+   * ton tai khi mo bang trinh duyet thuong, vi du staff/benh nhan tu mo tren dien thoai ca nhan) -
+   * xem chi tiet co che tai preload.js/main.js (ipcMain.on('quit-app', ...)).
+   */
+  function openExitAppModal() {
+    document.getElementById('exitAppModal').style.display = 'flex';
+  }
+  function closeExitAppModal() {
+    document.getElementById('exitAppModal').style.display = 'none';
+  }
+  function confirmExitApp() {
+    closeExitAppModal();
+    if (window.widgetBridge && typeof window.widgetBridge.quitApp === 'function') {
+      window.widgetBridge.quitApp();
+    }
+  }
+  (function initExitAppButton() {
+    if (window.widgetBridge && typeof window.widgetBridge.quitApp === 'function') {
+      const link = document.getElementById('exitAppLink');
+      if (link) link.style.display = 'inline-flex';
+    }
+  })();
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {
+      // Thuong la do trang dang mo qua HTTP thuong tren dia chi IP LAN (chua bat HTTPS) - tinh
+      // nang "cai vao man hinh chinh" se khong dung duoc nhung moi chuc nang khac van binh thuong.
+    });
+  }
+</script>
+</body>
+</html>

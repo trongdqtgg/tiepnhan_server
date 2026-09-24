@@ -1,0 +1,134 @@
+{
+  "_huong_dan": [
+    "File cau hinh CAU HOI SANG LOC tai Kiosk benh nhan tu cap so (/kiosk). Sao chep file nay thanh kiosk-questions.json (cung thu muc voi .env) roi sua.",
+    "Sua xong LUU FILE la ap dung ngay o luot hoi tiep theo, KHONG can khoi dong lai server. File sai cu phap -> server dung cau hoi mac dinh va bao loi trong cua so server.",
+    "Luu file bang UTF-8. Giu nguyen dau ngoac kep, dau phay; xuong dong trong 1 cau thi viet \\n.",
+    "enabled=false: tat han cau hoi va nut Khong mang CCCD (kiosk hoat dong nhu cu).",
+    "answerTimeoutSeconds: so giay cho moi cau hoi chon; het gio KHONG cap so. inputTimeoutSeconds: so giay cho cau nhap so (tinh lai tu dau moi lan bam phim). messageSeconds: thoi gian hien thong bao ket thuc.",
+    "questions.<ma>.text: noi dung cau hoi hien tren man hinh. options[].label: chu tren nut. options[].stop=true: chon nut nay thi KET THUC, khong cap so, hien stopMessage (hoac contactStaffMessage).",
+    "printLabel: ten dong in tren phieu va hien o man hinh quay (de trong = khong in). options[].printText: chu in thay cho label (tuy chon).",
+    "flows.scan: thu tu cau hoi sau khi quet CCCD/BHYT. flows.noId: thu tu cau hoi cho BN khong mang giay to (bat buoc co 1 cau role=cccd).",
+    "lockMessage: noi dung hien tren man hinh khi nhan vien KHOA tu cap so (nut o khoa tren header /kiosk)."
+  ],
+  "enabled": true,
+  "answerTimeoutSeconds": 10,
+  "inputTimeoutSeconds": 30,
+  "messageSeconds": 10,
+  "noIdButtonLabel": "Không mang CCCD / thẻ BHYT? Bấm vào đây",
+  "lockMessage": "Vui lòng lấy số thứ tự có sẵn ở hộp bên dưới máy.\nNếu hết số, vui lòng liên hệ nhân viên hướng dẫn tiếp nhận.",
+  "contactStaffMessage": "Xin lỗi, máy chưa thể cấp số cho Ông/Bà.\nVui lòng liên hệ NHÂN VIÊN HƯỚNG DẪN TIẾP NHẬN để được hỗ trợ.",
+  "timeoutMessageScan": "Hết thời gian trả lời - CHƯA cấp số.\nVui lòng quét lại CCCD hoặc thẻ BHYT để làm lại.",
+  "timeoutMessageNoId": "Hết thời gian trả lời - CHƯA cấp số.\nVui lòng bấm lại nút \"Không mang CCCD / thẻ BHYT\" để làm lại.",
+  "questions": {
+    "visitedOtherFacility7d": {
+      "type": "choice",
+      "text": "Trong 7 ngày vừa qua, Ông/Bà có đi khám bệnh ở BỆNH VIỆN hoặc TRẠM Y TẾ nào khác không?",
+      "printLabel": "Khám nơi khác 7 ngày qua",
+      "options": [
+        {
+          "value": "yes",
+          "label": "CÓ"
+        },
+        {
+          "value": "no",
+          "label": "KHÔNG"
+        }
+      ]
+    },
+    "paymentType": {
+      "type": "choice",
+      "text": "Ông/Bà khám BẢO HIỂM Y TẾ hay khám DỊCH VỤ (tự trả tiền)?",
+      "printLabel": "Hình thức khám",
+      "options": [
+        {
+          "value": "BHYT",
+          "label": "BẢO HIỂM Y TẾ"
+        },
+        {
+          "value": "DICH_VU",
+          "label": "DỊCH VỤ"
+        }
+      ]
+    },
+    "visitedHereBefore": {
+      "type": "choice",
+      "text": "Ông/Bà đã từng khám bệnh ở đây lần nào chưa?",
+      "printLabel": "Đã khám ở đây",
+      "options": [
+        {
+          "value": "yes",
+          "label": "ĐÃ TỪNG KHÁM"
+        },
+        {
+          "value": "no",
+          "label": "CHƯA, LẦN ĐẦU"
+        }
+      ]
+    },
+    "noIdVisitedHereBefore": {
+      "type": "choice",
+      "text": "Ông/Bà đã từng khám bệnh ở đây lần nào chưa?",
+      "printLabel": "Đã khám ở đây",
+      "options": [
+        {
+          "value": "yes",
+          "label": "ĐÃ TỪNG KHÁM"
+        },
+        {
+          "value": "no",
+          "label": "CHƯA, LẦN ĐẦU",
+          "stop": true
+        }
+      ]
+    },
+    "canUseKeypad": {
+      "type": "choice",
+      "text": "Ông/Bà có tự bấm số được trên màn hình cảm ứng hoặc bàn phím không?",
+      "printLabel": "",
+      "options": [
+        {
+          "value": "yes",
+          "label": "CÓ, TÔI TỰ BẤM ĐƯỢC"
+        },
+        {
+          "value": "no",
+          "label": "KHÔNG",
+          "stop": true
+        }
+      ]
+    },
+    "cccdNumber": {
+      "type": "input",
+      "role": "cccd",
+      "text": "Mời Ông/Bà bấm SỐ CĂN CƯỚC CÔNG DÂN (12 số)",
+      "printLabel": "CCCD (nhập tay)",
+      "pattern": "^\\d{12}$",
+      "maxLength": 12,
+      "errorText": "Số căn cước phải đủ 12 chữ số. Vui lòng kiểm tra lại."
+    },
+    "phoneNumber": {
+      "type": "input",
+      "role": "phone",
+      "text": "Mời Ông/Bà bấm SỐ ĐIỆN THOẠI (10 số)",
+      "printLabel": "SĐT",
+      "pattern": "^0\\d{9}$",
+      "maxLength": 10,
+      "errorText": "Số điện thoại phải có 10 chữ số và bắt đầu bằng số 0. Vui lòng kiểm tra lại."
+    }
+  },
+  "flows": {
+    "scan": [
+      "visitedOtherFacility7d",
+      "paymentType",
+      "visitedHereBefore"
+    ],
+    "noId": [
+      "noIdVisitedHereBefore",
+      "canUseKeypad",
+      "cccdNumber",
+      "phoneNumber",
+      "visitedOtherFacility7d",
+      "paymentType"
+    ]
+  }
+}

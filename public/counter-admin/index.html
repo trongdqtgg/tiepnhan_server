@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Quản lý quầy tiếp nhận</title>
+<link rel="stylesheet" href="/common.css" />
+<style>
+  .counter-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .counter-table th, .counter-table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .counter-table th { color: var(--text-muted); font-weight: 600; font-size: 13px; }
+  .counter-table tr:last-child td { border-bottom: none; }
+  .counter-table td.actions { white-space: nowrap; text-align: right; }
+  .counter-table td.actions button { margin-left: 6px; padding: 8px 12px; font-size: 13px; }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+  }
+  .status-badge.active { background: #e3f6ea; color: var(--ok); }
+  .status-badge.paused { background: #fde8e8; color: var(--danger-dark); }
+  .status-badge.in-use { background: #eef2f8; color: var(--text-muted); font-weight: 600; }
+  .top-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; margin-left: 52px; }
+  .form-row { display: grid; gap: 6px; }
+  .form-row label { font-size: 13px; font-weight: 600; color: var(--text-muted); }
+  #formError {
+    display: none; padding: 10px 12px; border-radius: 8px; font-size: 13px;
+    background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn);
+  }
+  .empty-state { text-align: center; padding: 30px 10px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<a href="/" class="home-link" title="Về trang chủ" aria-label="Về trang chủ">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+</a>
+<div class="wrap">
+  <div class="top-row">
+    <div>
+      <h1 style="margin:0;">Quản lý quầy tiếp nhận</h1>
+      <div class="sub" style="margin:2px 0 0;">Thêm quầy mới, sửa mã/tên, tạm ngưng hoặc kích hoạt lại quầy.</div>
+    </div>
+    <button class="btn-primary" onclick="openAddModal()">+ Thêm quầy mới</button>
+  </div>
+
+  <div class="card" style="padding: 8px 16px;">
+    <div style="overflow-x:auto;">
+      <table class="counter-table">
+        <thead>
+          <tr>
+            <th>Mã quầy</th>
+            <th>Tên quầy</th>
+            <th>Trạng thái</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="counterTableBody">
+          <tr><td colspan="4" class="empty-state">Đang tải...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal them/sua quay - dung chung 1 form, khac nhau boi tieu de + counterId dang sua
+     (null = dang them moi). Xem openAddModal()/openEditModal()/submitCounterForm() trong
+     counter-admin.js. -->
+<div id="counterModal" class="modal-overlay" style="display:none;">
+  <div class="modal-panel" style="max-width:420px;">
+    <div class="modal-header">
+      <h2 id="modalTitle" style="margin:0; font-size:18px;">Thêm quầy mới</h2>
+      <button class="btn-secondary" style="padding:6px 10px;" onclick="closeCounterModal()">✕</button>
+    </div>
+    <div class="modal-body grid">
+      <div id="formError"></div>
+      <div class="form-row">
+        <label for="inputCode">Mã quầy</label>
+        <input type="text" id="inputCode" placeholder="Ví dụ: Q01" maxlength="30" autocomplete="off" />
+      </div>
+      <div class="form-row">
+        <label for="inputName">Tên quầy</label>
+        <input type="text" id="inputName" placeholder="Ví dụ: Quầy tiếp nhận 1" maxlength="120" autocomplete="off" />
+      </div>
+      <div style="display:flex; gap:10px; margin-top:8px;">
+        <button class="btn-primary" style="flex:1;" onclick="submitCounterForm()">Lưu</button>
+        <button class="btn-secondary" style="flex:1;" onclick="closeCounterModal()">Huỷ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/vendor/ui-dialog.js"></script>
+<script src="/vendor/rt-client.js"></script>
+<script src="counter-admin.js"></script>
+</body>
+</html>

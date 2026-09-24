@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<!-- co dinh giao dien tren dien thoai/may tinh bang - khong cho pinch-zoom/double-tap-zoom, vi
+     day la man hinh dang "app" (kieu kiosk), zoom nham se lam vo bo cuc/an mat nut. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Nhân viên hỗ trợ cấp số</title>
+<link rel="stylesheet" href="/common.css" />
+<link rel="manifest" href="/staff-kiosk/manifest.json" />
+<link rel="apple-touch-icon" href="/staff-kiosk/icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#f3f6fb" />
+<!-- The tag rieng cho iOS/iPadOS Safari - Safari KHONG dung manifest.json de "Thêm vào MH chính",
+     phai khai bao rieng 3 dong nay thi khi mo tu icon man hinh chinh moi chay o che do toan man
+     hinh (an thanh dia chi Safari) giong 1 app that thay vi mo lai trong tab trinh duyet. -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Kiosk cấp số" />
+<meta name="mobile-web-app-capable" content="yes" />
+<style>
+  /* Khoa zoom them 1 lop nua bang CSS (touch-action) - "user-scalable=no" o meta viewport tren
+     khong duoc TAT CA trinh duyet/phien ban ton trong tuyet doi (dac biet mot so ban iOS Safari
+     cu van cho double-tap-zoom), touch-action:manipulation giup tat luon double-tap-zoom o cap
+     CSS, hoat dong dong bo tren ca Android lan iOS. */
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  .priority-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:12px; }
+  @media (max-width: 560px) { .priority-grid { grid-template-columns: 1fr; } }
+  .priority-btn {
+    text-align:left; padding:16px; border-radius:12px; font-weight:700; font-size:16px;
+    color:#0f172a; border:2px solid rgba(0,0,0,0.15);
+  }
+  .priority-btn.emergency { font-size:19px; text-align:center; color:#fff; }
+  /* Moi doi tuong la 1 hang gom nut chinh (chon doi tuong) + nut nho "📱 QR" (tao ma QR cap nhanh,
+     chi hien khi doi tuong do co cau hinh QUICK_QR_CODE_<code> trong .env - xem loadPriorityOptions()
+     trong staff-kiosk.js) dat canh nhau - thay the .priority-btn la item grid truc tiep nhu truoc. */
+  .priority-row { display:flex; gap:8px; align-items:stretch; }
+  .priority-row.emergency-row { grid-column: 1 / -1; }
+  .priority-row .priority-btn { flex:1 1 auto; }
+  .quick-qr-btn { flex:0 0 auto; font-size:13px; padding:8px 10px; white-space:nowrap; }
+  .top-links { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; margin-left:52px; flex-wrap:wrap; gap:10px; }
+  .scan-mode-row { display:flex; gap:12px; margin-top:8px; flex-wrap:wrap; }
+  .batch-qty-row {
+    display:flex; align-items:center; gap:10px; margin-top:12px; padding:10px 12px;
+    background:#f1f5f9; border-radius:10px; flex-wrap:wrap;
+  }
+  .batch-qty-row label { font-weight:700; font-size:14px; }
+  .batch-qty-row input#batchQtyInput {
+    width:76px; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1; font-size:16px;
+    text-align:center;
+  }
+  .batch-qty-row .muted { font-size:12px; flex-basis:100%; }
+  /* Nut tang/giam nhanh so luong - danh cho man hinh nay CHU YEU thao tac bang MAY QUET (khong co
+     ban phim vat ly tien dung de go so), bam nut nhanh hon go tay tren ban phim ao. */
+  .qty-step-group { display:flex; align-items:center; gap:4px; flex-wrap:wrap; }
+  .qty-step-btn {
+    min-width:40px; padding:8px 10px; border-radius:8px; border:1px solid #cbd5e1;
+    background:#fff; color:#0f172a; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .qty-step-btn:active { background:#e2e8f0; }
+  /* MUC 91 - nut moi "Chuyển sang kiosk bốc số bệnh nhân" dat NGAY KE BEN nut "Trang chủ" (cung
+     dang hinh tron co dinh o goc tren-trai, xem class .home-link trong common.css) - chi lech sang
+     phai 48px (40px rong cua 1 nut + 8px khoang cach) de khong de len nhau. */
+  .kiosk-switch-link { left: 62px !important; }
+  /* .top-links von co margin-left:52px de chua 1 nut tron - nay co 2 nut lien tiep nen can rong
+     hon (2 nut 40px + 8px khoang cach + 14px le trai ≈ 102px, lam tron len 106px cho thoang). */
+  .top-links { margin-left: 106px !important; }
+</style>
+</head>
+<body>
+<!-- Nut "Trang chủ" dung chung cho man hinh nhan vien - dua thang ve "/" (co the dang xuat tu
+     trang chu neu can, khong can lap lai nut Dang xuat rieng o day).
+     MUC 91: THEM `onclick="return guardLeaveStaffKiosk(event)"` - CHAN LAI (khong cho ve trang
+     chu) neu dang co 1 chuoi "cấp nhiều số" tu dong con dang chay (xem guardLeaveStaffKiosk() trong
+     staff-kiosk.js), theo dung yeu cau nguoi dung "không được nút nào được phép thoát khỏi màn
+     hình staff-kiosk" trong luc dang cap hang loat. -->
+<a href="/" class="home-link" title="Về trang chủ" aria-label="Về trang chủ" onclick="return guardLeaveStaffKiosk(event)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+</a>
+<!-- MOI (muc 91) - nut chuyen NHANH sang kiosk boc so cho BENH NHAN (/kiosk/), dat ke ben nut
+     "Trang chủ" - theo yeu cau nguoi dung: "bổ sung 1 cái nút kế bên icon home để tôi chuyển nhanh
+     sang màn hình kiosk bốc số của bệnh nhân". Dung CHUNG icon-button tron nhu nut Trang chu (class
+     .home-link, chi lech vi tri qua .kiosk-switch-link o tren) va CUNG duoc bao ve boi
+     guardLeaveStaffKiosk() y het nut Trang chu. -->
+<a href="/kiosk/" class="home-link kiosk-switch-link" title="Chuyển sang kiosk bốc số bệnh nhân" aria-label="Chuyển sang kiosk bốc số bệnh nhân" onclick="return guardLeaveStaffKiosk(event)">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 6v12M16 6v12"/></svg>
+</a>
+<div class="wrap">
+  <div class="top-links">
+    <h1 style="margin:0;">Nhân viên hỗ trợ cấp số</h1>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <!-- MUC 96/97 - "Mở reset > 16h": nut CHUYEN "ngay hieu luc" cap so sang NGAY TIEP THEO
+           (ngung cap so cho ngay hom nay, STT ngay moi tu bat dau lai tu 1 - xem lam ro cua nguoi
+           dung o muc 97: "Mở reset > 16h ở màn hình staff-kiosk là ngưng cấp số ở ngày hiện tại.
+           bắt đầu cấp số cho ngày tiếp theo đó ạ" - KHONG PHAI "xoa bo dem cap lai tu 1 cung ngay
+           hom nay" nhu thiet ke ban dau o muc 96). CHI duoc phep bam (nut chi thuc su cho phep,
+           khong bi mo xam/disabled) sau 16h (4 gio chieu). Nut LUON hien (de nhan vien biet tinh
+           nang nay ton tai) nhung `disabled` truoc 16h - xem updateResetSequenceBtnUI()/
+           handleResetSequenceClick() trong staff-kiosk.js. Dong ho client CHI dung de bat/tat giao
+           dien cho de nhin - lop chan THAT SU nam o server (route POST /api/tickets/reset-sequence
+           trong src/routes/tickets.js, kiem tra lai gio theo dong ho may chu). -->
+      <button id="resetSequenceBtn" class="btn-secondary" onclick="handleResetSequenceClick()" disabled>
+        Mở reset &gt; 16h
+      </button>
+      <!-- Chi hien tren dien thoai/may tinh bang (xem updateInstallButtonVisibility() trong
+           staff-kiosk.js) - may tinh ban/laptop khong can "cai vao man hinh chinh". -->
+      <button id="installPwaBtn" class="btn-secondary" style="display:none;" onclick="handleInstallPwaClick()">
+        Cài đặt ứng dụng
+      </button>
+    </div>
+  </div>
+  <!-- Huong dan thao tac thu cong khi khong co prompt cai dat tu dong (luon la truong hop tren
+       iOS Safari, hoac tren Android neu trang dang mo qua http:// thuong tren IP LAN thay vi
+       HTTPS/localhost - dieu kien bat buoc de trinh duyet cho "cai dat tu dong"). -->
+  <div id="installPwaInstructions" class="card" style="display:none; margin-bottom:16px; font-size:14px;"></div>
+
+  <!-- Chi tiet so luong dang cho theo TUNG doi tuong uu tien + doi tuong thuong (zero-fill du ca
+       8 loai) - LUON hien du dang o buoc nao (chon doi tuong/xac minh/da cap xong), cap nhat
+       realtime qua socket.io. Xem renderPriorityCountBox() trong staff-kiosk.js va class dung
+       chung .priority-count-box trong common.css. -->
+  <div class="priority-count-box" id="priorityCountBox" style="margin-bottom: 16px;"></div>
+
+  <div id="step-form" class="card grid">
+    <div class="muted" style="margin-top:8px;">Chọn đối tượng ưu tiên để cấp số:</div>
+    <!-- MUC 90: BO HAN tinh nang "quét tự động" (benh nhan tu quet CCCD/BHYT khi chua co doi tuong
+         nao duoc chon) - theo yeu cau nguoi dung "loại bỏ code quét cccd/bhyt ở màn hình
+         staff-kiosk nhé vì ko cần thiết nữa" (tinh nang nay tung la nguon goc cua 1 gioi han da
+         cong bo o muc 89: co the tranh chap voi chuoi "cấp nhiều số" tu dong cung dung chung
+         resetForm()/step-done). Man hinh nay gio CHI con 1 cach xac dinh danh tinh benh nhan: quet
+         CCCD/BHYT o buoc "Sẵn sàng quét" (step-verify) SAU KHI nhan vien da bam chon 1 doi tuong -
+         xem processScanText() trong staff-kiosk.js. -->
+    <div class="muted" style="margin-top:4px; font-size:12px;">
+      Chọn đối tượng ưu tiên bên dưới trước, sau đó quét CCCD/thẻ BHYT của bệnh nhân ở màn hình xác
+      minh (hoặc bấm "Cấp số ngay" nếu không cần xác minh).
+    </div>
+    <!-- CAP NHIEU SO TU DONG (SUA LAI o muc 89 theo yeu cau ro nhat cua nguoi dung: "Base từ luồng
+         cấp 1 phiếu ... không được bypass qua bước nào hết"): nhap so luong > 1 roi bam 1 doi tuong
+         ben duoi se CHI DON GIAN tu dong bam ho DUNG nut do nhieu lan lien tiep - moi lan la 1 lan
+         goi `startVerify()` Y HET nhu bam tay (NEU dang bat STAFF_KIOSK_SKIP_VERIFY thi cap ngay,
+         NEU KHONG thi van hien man hinh "Sẵn sàng quét" cho tung so, KHONG bo qua buoc nao ca). Co
+         the bam "Dừng" ngay tai day (xem #autoIssueSeqBox ben duoi) bat ky luc nao GIUA 2 lan cap.
+         De o nhap = 1 (mac dinh) thi hanh vi bam nut GIU NGUYEN nhu truoc. Xem handlePriorityClick()/
+         confirmAndStartAutoIssueSeq()/maybeContinueAutoIssueSeq() trong staff-kiosk.js. -->
+    <div class="batch-qty-row">
+      <label for="batchQtyInput">Số lượng cần cấp:</label>
+      <!-- Nut tang/giam nhanh (-10/-9/-1/+1/+9/+10) - man hinh nay dung MAY QUET la chinh, nhan
+           vien thuong khong tien go so bang tay/ban phim ao, bam nut se nhanh va chinh xac hon. Xem
+           stepBatchQuantity() trong staff-kiosk.js - deu co CHAN duoi 1 (khong cho ve 0/am).
+           (Truoc do doi 10 -> 9 theo yeu cau; nay BO SUNG THEM lai cap nut ±10 - giu CA HAI cap
+           ±9 va ±10 cung luc, khong thay the nhau, theo dung yeu cau moi nhat.) Nut "Reset" dua
+           nhanh so luong ve lai 1 (goi resetBatchQuantity() - ham nay da co san tu truoc, dung de
+           tu dong reset sau khi cap xong 1 lo, nay dung lai them cho nut bam thu cong). -->
+      <div class="qty-step-group">
+        <button type="button" class="qty-step-btn" onclick="stepBatchQuantity(-10)" title="Giảm 10">−10</button>
+        <button type="button" class="qty-step-btn" onclick="stepBatchQuantity(-9)" title="Giảm 9">−9</button>
+        <button type="button" class="qty-step-btn" onclick="stepBatchQuantity(-1)" title="Giảm 1">−1</button>
+        <input id="batchQtyInput" type="number" min="1" value="1" inputmode="numeric" />
+        <button type="button" class="qty-step-btn" onclick="stepBatchQuantity(1)" title="Tăng 1">+1</button>
+        <button type="button" class="qty-step-btn" onclick="stepBatchQuantity(9)" title="Tăng 9">+9</button>
+        <button type="button" class="qty-step-btn" onclick="stepBatchQuantity(10)" title="Tăng 10">+10</button>
+        <button type="button" class="qty-step-btn" onclick="resetBatchQuantity()" title="Đặt lại về 1">Reset</button>
+      </div>
+      <div class="muted">
+        Để 1 = cấp bình thường như cũ. Chọn lớn hơn 1 rồi bấm 1 đối tượng bên dưới để tự động cấp
+        lần lượt NHIỀU số cho đúng đối tượng đó, đúng theo quy trình cấp 1 số bình thường (không bỏ
+        qua bước xác minh nếu đang bật). Số lượng tự động về lại 1 sau khi bắt đầu, tránh cấp nhầm
+        lần tiếp theo.
+      </div>
+      <!-- MOI (muc 89) - nut "Dừng" cho "cấp nhiều số" tu dong NAM O DAY (man hinh nhap so luong cần
+           cấp), THEO DUNG yeu cau nguoi dung: "tôi có thể yêu cầu dừng ở màn hình nhập số lượng cần
+           cấp" - KHONG con nam tren man hinh "Số thứ tự vừa cấp" (#step-done) nhu muc 87 nua. Chi
+           hien khi dang co 1 chuoi tu dong dang chay (xem updateAutoIssueSeqUI() trong staff-kiosk.js). -->
+      <div id="autoIssueSeqBox" style="display:none; margin-top:10px; padding:12px; border-radius:10px; background:#eff6ff; border:1px solid #bfdbfe; color:#1e3a8a;">
+        <div id="autoIssueSeqText" style="font-weight:700; margin-bottom:8px;"></div>
+        <button type="button" class="btn-secondary" onclick="stopAutoIssueSeq()">Dừng</button>
+      </div>
+    </div>
+    <div id="priorityGrid" class="priority-grid">
+      <div class="muted">Đang tải...</div>
+    </div>
+  </div>
+
+  <!-- Input an, focus khi dang o buoc xac minh, de may quet QR (kieu ban phim) go noi dung vao day.
+       Them `inputmode="none"` (cung ly do voi cac input tuong tu trong public/kiosk/index.html) de
+       khong bi trinh duyet tu bat ban phim ao tren man hinh cam ung. -->
+  <input id="scanInput" type="text" autocomplete="off" inputmode="none"
+    style="position:absolute; top:0; left:0; width:1px; height:1px; opacity:0; pointer-events:none;" />
+
+  <div id="step-verify" class="card grid" style="display:none;">
+    <div class="sub" style="margin-bottom:0;">
+      Đang cấp: <b id="verifyPriorityLabel"></b> — quét CCCD hoặc thẻ BHYT của bệnh nhân để xác
+      minh (tránh trường hợp bệnh nhân đã tự lấy số ở kiosk rồi lấy thêm lần nữa). Có máy quét USB
+      thì quét trực tiếp; trên điện thoại/máy tính bảng không có máy quét thì bấm
+      <b>"Chụp ảnh quét QR"</b>, hoặc bấm <b>"Tải ảnh QR lên"</b> nếu đã có sẵn ảnh chứa mã QR.
+    </div>
+    <div class="muted">Trạng thái: <span id="verifyStatus">Sẵn sàng quét...</span></div>
+    <div id="verifyWarning" style="display:none; padding:12px; border-radius:10px; font-size:14px;"></div>
+    <div class="scan-mode-row">
+      <button class="btn-secondary" onclick="openCameraScan()">Chụp ảnh quét QR</button>
+      <button class="btn-secondary" onclick="openUploadScan()">Tải ảnh QR lên</button>
+    </div>
+    <div style="display:flex; gap:12px; margin-top:8px; flex-wrap:wrap;">
+      <button class="btn-primary" onclick="issueWithoutVerify()">Cấp số ngay (bỏ qua xác minh)</button>
+      <button class="btn-secondary" onclick="cancelVerify()">Huỷ, quay lại</button>
+    </div>
+  </div>
+
+  <!-- Man hinh "Số thứ tự vừa cấp" - dung CHUNG cho ca cap 1 so binh thuong (bam tay) VA tung so
+       MOT trong 1 chuoi "cấp nhiều số" tu dong (muc 89) - man hinh nay KHONG con chua gi rieng cho
+       che do tu dong nua (khong con thanh tien do/nut "Dừng" o day, xem #autoIssueSeqBox tren
+       #step-form thay the) - hien HANH VI Y HET nhu 1 lan bam tay binh thuong, dung tinh than
+       "Base từ luồng cấp 1 phiếu ... không được bypass qua bước nào hết". -->
+  <div id="step-done" class="card" style="display:none; text-align:center;">
+    <div class="muted">Số thứ tự vừa cấp</div>
+    <div class="big-number" id="doneNumber">000</div>
+    <div class="muted" id="doneLabel"></div>
+    <div class="muted" style="margin-top:12px;">Phiếu đang được in, vui lòng lấy phiếu đưa cho bệnh nhân.</div>
+    <!-- Truoc day co nut "Xong – Cấp số cho người khác" de nhan vien tu bam - nay BO HAN nut nay,
+         thay bang bo dem nguoc TU DONG quay lai man hinh chon doi tuong sau dung
+         KIOSK_AUTO_CONFIRM_SECONDS giay (dung chung cau hinh voi /kiosk - xem startDoneCountdown()
+         trong staff-kiosk.js), giup nhan vien cap so lien tuc nhanh hon ma khong can thao tac tay.
+         Khi resetForm() chay sau khi het gio, neu dang co 1 chuoi "cấp nhiều số" tu dong dang chay
+         thi se TU DONG cap tiep tu day (xem maybeContinueAutoIssueSeq() trong staff-kiosk.js). -->
+    <div class="muted" style="margin-top:12px;">Tự động quay lại sau <span id="doneCountdown">5</span> giây...</div>
+  </div>
+</div>
+
+<!-- Modal hien anh QR "cap nhanh" cho 1 doi tuong - xem showQuickQr()/closeQuickQrModal() trong
+     staff-kiosk.js va 2 route GET /api/tickets/quick-qr-image/:code, POST /api/tickets/quick. -->
+<div id="quickQrModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); align-items:center; justify-content:center; z-index:60;">
+  <div class="card" style="max-width:360px; text-align:center;">
+    <div class="sub" id="quickQrTitle" style="margin-bottom:8px;"></div>
+    <div id="quickQrStatus" class="muted">Đang tạo mã...</div>
+    <img id="quickQrImg" style="display:none; margin:12px auto 0; border-radius:8px; background:#fff; padding:10px;" width="240" height="240" alt="Mã QR cấp nhanh" />
+    <div class="muted" style="margin-top:10px; font-size:13px;">
+      In hoặc dán mã này ở vị trí phù hợp. Quét lại đúng mã này (bằng máy quét USB, hoặc chụp ảnh
+      bằng camera ngay tại màn hình đang mở trang này) để cấp số ngay lập tức, không cần chọn đối
+      tượng/xác minh gì thêm.
+    </div>
+    <div style="display:flex; gap:10px; justify-content:center; margin-top:16px;">
+      <button class="btn-secondary" onclick="window.print()">In</button>
+      <button class="btn-secondary" onclick="closeQuickQrModal()">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<script src="/vendor/rt-client.js"></script>
+<script src="/vendor/scanner-buffer.js"></script>
+<script src="/vendor/jsQR.min.js"></script>
+<script src="/vendor/camera-scan.js"></script>
+<script src="/print-receipt.js"></script>
+<script src="staff-kiosk.js"></script>
+<script>
+  // Dang ky service worker (chi de trang du dieu kien "cai vao man hinh chinh" tren Android/
+  // Chrome - xem sw.js, KHONG cache gi ca) - bo qua neu trinh duyet khong ho tro, hoac trang dang
+  // mo qua http:// thuong tren dia chi IP LAN (service worker cung yeu cau HTTPS/localhost giong
+  // camera, se tu bo qua/loi im lang, khong anh huong gi den cac chuc nang khac cua trang).
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/staff-kiosk/sw.js', { scope: '/staff-kiosk/' }).catch(() => {
+      // Khong sao ca - thuong la do trang dang mo qua HTTP thuong (chua bat HTTPS), tinh nang
+      // "cai vao man hinh chinh" se khong dung duoc nhung moi chuc nang khac van binh thuong.
+    });
+  }
+</script>
+</body>
+</html>

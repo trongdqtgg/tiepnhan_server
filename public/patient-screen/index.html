@@ -1,0 +1,596 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Màn hình bệnh nhân - Quầy</title>
+<link rel="stylesheet" href="/common.css" />
+<link rel="manifest" id="pwaManifestLink" href="/patient-screen/manifest.json" />
+<script>
+  // manifest.json cua trang nay la ROUTE DONG (xem src/routes/patientScreenManifest.js) - phai
+  // giu lai "?counter=ID" dang co tren URL hien tai khi tham chieu toi no, de sau khi "cai vao man
+  // hinh chinh" tu 1 quay cu the thi mo LAI DUNG quay do (khong bi mat tham so counter). Dat script
+  // nay NGAY SAU the <link> o tren, chay truoc khi trinh duyet kip doc manifest de kiem tra dieu
+  // kien "installable".
+  (function () {
+    var link = document.getElementById('pwaManifestLink');
+    if (link && location.search) link.href = '/patient-screen/manifest.json' + location.search;
+  })();
+</script>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#f3f6fb" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Màn hình quầy" />
+<meta name="mobile-web-app-capable" content="yes" />
+<style>
+  /**
+   * BO CUC GON: dung .app-shell (header/main/footer, xem common.css) chiem DUNG 1 man hinh
+   * (100vh, khong cuon trang) - phan noi dung chinh (so dang moi) van CAN GIUA nhu truoc, nhung co
+   * chu deu quy ve don vi "vh" (% chieu cao man hinh) de tu co gian vua voi phan khong gian con
+   * lai SAU KHI da tru header/footer, khong bi tran/can cuon tren cac kich thuoc man hinh khac
+   * nhau.
+   */
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  /*
+   * BO CUC 3 COT: sidebar trai - noi dung chinh (so dang moi) - sidebar phai. Dung LUOI (grid) VOI
+   * 2 COT NGOAI CO DINH KHONG DOI (--sidebar-w, xem bien duoi) thay vi "1fr" - ly do: neu dung 1fr,
+   * luc sidebar AN DI (`display:none`, mau 'default' - KHONG cau hinh PATIENT_SCREEN_THEME) grid
+   * vAn GIU nguyen 2 cot 1fr rong (dung de can giua) nhung khi sidebar HIEN (co mau trang tri) ma
+   * cung dung 1fr thi noi dung trang tri se bi CO GIAN theo be rong man hinh mot cach khong kiem
+   * soat duoc (rat rong tren man hinh lon). Dung 1 gia tri PX CO DINH cho ca 2 truong hop (an =
+   * 0px do chinh element bi an, hien = --sidebar-w) giu duoc cot giua LUON CAN GIUA CHINH XAC O
+   * MOI TRUONG HOP (vi 2 cot ngoai luon bang nhau du hien hay an), dong thoi noi dung trang tri co
+   * kich thuoc de doan truoc, khong vo bo cuc.
+   */
+  :root { --sidebar-w: 220px; --number-font-scale: 1; }
+  .patient-main {
+    height: 100%; display: grid; grid-template-columns: var(--sidebar-w) 1fr var(--sidebar-w);
+    align-items: center; padding: 1vh 16px; gap: 12px;
+  }
+  .box { text-align: center; max-width: 90vw; grid-column: 2; }
+  /* font-size nhan them --number-font-scale (mac dinh 1 = 100%, cau hinh qua bien moi truong
+     PATIENT_SCREEN_NUMBER_FONT_SCALE trong .env, ap dung o applyBrandingExtras() ben duoi) de
+     phong to/thu nho chu SO THU TU ma khong dong den cac chu khac tren man hinh. */
+  .big-number {
+    font-size: clamp(calc(70px * var(--number-font-scale)), calc(26vh * var(--number-font-scale)), calc(220px * var(--number-font-scale)));
+    line-height: 1;
+  }
+  /*
+   * Sidebar trang tri theo "mua/dip le" (PATIENT_SCREEN_THEME trong .env) - AN MAC DINH (mau
+   * 'default'), chi hien khi co noi dung (applyPatientScreenTheme() dien innerHTML + bo class
+   * "has-content" o duoi). Dat height:100% + cac lop trang tri canh tren/duoi bang box-shadow
+   * inset de "phu kin" chieu cao sidebar ma khong can anh nen rieng - toan bo la CSS/SVG thuan,
+   * khong phu thuoc file anh ben ngoai nen luon hien duoc ngay ca khi may khong co mang.
+   */
+  .screen-sidebar {
+    display: none; height: 90vh; max-height: 100%; overflow: hidden; border-radius: 16px;
+    align-items: center; justify-content: center; position: relative;
+  }
+  .screen-sidebar.left { grid-column: 1; }
+  .screen-sidebar.right { grid-column: 3; }
+  .screen-sidebar.has-content { display: flex; }
+  .screen-sidebar svg { width: 100%; height: 100%; }
+  .sidebar-caption {
+    /* Theo yeu cau: AN dong chu chu thich ("CHÚC MỪNG NĂM MỚI"...) ghim day sidebar - chi giu lai
+       hoa tiet SVG trang tri, khong hien text nay nua. Van giu nguyen HTML/JS tao ra dong chu nay
+       (renderSidebarSvg() trong script ben duoi) de de dang bat lai sau nay neu can, chi can xoa
+       dong "display: none" o day. */
+    display: none;
+    position: absolute; left: 0; right: 0; bottom: 6%; text-align: center; font-weight: 800;
+    font-size: clamp(13px, 1.6vh, 20px); letter-spacing: 0.5px; padding: 0 6px;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  }
+  @media (max-width: 900px) {
+    /* Man hinh hep (dien thoai/may tinh bang dung) - bo hang sidebar de danh het cho cho so thu
+       tu chinh, tranh chu so bi ep nho lai chi de nhuong cho trang tri 2 ben. */
+    :root { --sidebar-w: 0px; }
+    .screen-sidebar { display: none !important; }
+  }
+  .priority-label {
+    margin-top: -0.5vh; font-size: clamp(13px, 2vh, 20px); font-weight: 600; color: var(--text-muted); min-height: 20px;
+  }
+  .skipped-box {
+    margin-top: 2vh; padding: 1.2vh 20px; background: var(--warn-bg); border: 1px solid var(--warn-border);
+    border-radius: 12px; display: inline-block;
+  }
+  .skipped-title { color: var(--warn); font-weight: 700; margin-bottom: 4px; font-size: clamp(12px, 1.6vh, 18px); }
+  .skipped-list { font-size: clamp(18px, 2.8vh, 28px); font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+  .legend-box {
+    margin-top: 1.6vh; padding: 0.8vh 16px; background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 12px; display: inline-flex; flex-wrap: wrap; gap: 12px; justify-content: center;
+    font-size: clamp(11px, 1.5vh, 14px);
+  }
+  #audioToggleBtn {
+    position: fixed; top: 14px; right: 14px; z-index: 20;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: #fff; border: 1px solid var(--border); color: var(--text-muted);
+    padding: 8px 10px; border-radius: 10px; opacity: 0.6; cursor: pointer;
+  }
+  #audioToggleBtn svg { width: 20px; height: 20px; }
+  #audioToggleBtn:hover { opacity: 1; color: var(--primary); }
+</style>
+</head>
+<body>
+<!-- Nut bat/tat am thanh doc so - mac dinh BAT. Mot so trinh duyet doi phai co 1 luot bam/tuong
+     tac cua nguoi dung truoc khi cho phep phat am thanh tu dong (autoplay policy) - nhan vien
+     nen bam 1 lan luc thiet lap man hinh nay de "mo khoa" am thanh cho ca phien lam viec. -->
+<a class="app-home-btn" href="/" title="Về màn hình chính">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+</a>
+<button id="audioToggleBtn" onclick="toggleAudio()" title="Bật/tắt giọng đọc số">
+  <svg id="audioIconOn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+  <svg id="audioIconOff" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+</button>
+<div class="app-shell" id="appShell">
+  <header class="app-header">
+    <div class="app-header-brand">
+      <span class="brand-mark" id="appBrandIcon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 2h4v6h6v4h-6v6h-4v-6H4V8h6V2z" />
+        </svg>
+      </span>
+      <img id="appLogoImg" class="brand-logo-img" style="display:none" alt="Logo" />
+      <div class="app-header-text">
+        <div class="app-clinic-name" id="appClinicName">Đang tải...</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="patient-main">
+      <!-- Sidebar trang tri 2 ben - rong/an mac dinh, chi co noi dung khi cau hinh
+           PATIENT_SCREEN_THEME trong .env khac "default" (xem applyPatientScreenTheme() ben
+           duoi). -->
+      <div class="screen-sidebar left" id="sidebarLeft"></div>
+      <div class="box">
+        <!-- Co chu bang dung ten don vi o header (xem .app-clinic-name trong common.css:
+             clamp(16px, 2.2vh, 24px)) - truoc day nho hon (18-22px) nen dat lai cho khop. -->
+        <div class="sub" id="counterLabel" style="font-size:clamp(16px,2.2vh,24px); font-weight:800; color:var(--text);">Đang tải...</div>
+        <div class="muted">Số đang mời</div>
+        <div class="big-number" id="num">---</div>
+        <div class="priority-label" id="priorityLabel"></div>
+
+        <div class="skipped-box" id="skippedBox" style="display:none;">
+          <div class="skipped-title">Các số đã gọi của quầy này nhưng bệnh nhân vắng mặt</div>
+          <div class="skipped-list" id="skippedList">Không có</div>
+        </div>
+
+        <!-- Chi tiet so luong dang cho (toan he thong, khong rieng quay nay) theo TUNG doi tuong
+             uu tien + doi tuong thuong (zero-fill du ca 8 loai) - xem renderPriorityCountBox() ben
+             duoi va class dung chung .priority-count-box trong common.css. -->
+        <div class="muted" style="margin-top: 1.6vh; font-size: clamp(11px, 1.4vh, 14px);">Số đang chờ trong hàng đợi</div>
+        <div class="priority-count-box" id="priorityCountBox" style="margin-top: 4px;"></div>
+      </div>
+      <div class="screen-sidebar right" id="sidebarRight"></div>
+    </div>
+  </main>
+
+  <footer class="app-footer" id="appFooterText"></footer>
+  <!-- Dong chan trang THU 2 (CLINIC_FOOTER_TEXT_2) - can them class "app-footer-2" (xem common.css)
+       de hien chu TO + mau XANH DUONG nhu ten don vi o header, khac voi dong 1 (chu nho, mau phu) -
+       thieu class nay la ly do dong 2 truoc day bi hien nhu dong 1 (nho, den). -->
+  <footer class="app-footer app-footer-2" id="appFooterText2" style="display:none; padding-top:0; border-top:none;"></footer>
+</div>
+<script src="/branding-header.js"></script>
+<script src="/vendor/rt-client.js"></script>
+<script>
+  const socket = io({ path: '/rt-bridge/' });
+  const params = new URLSearchParams(location.search);
+  const counterId = params.get('counter');
+
+  /**
+   * SIDEBAR TRANG TRI THEO MUA/DIP LE - cau hinh qua PATIENT_SCREEN_THEME trong .env (doc qua
+   * /api/branding, xem su kien "branding:loaded" phat tu /branding-header.js). Toan bo ve bang
+   * SVG/CSS thuan (khong dung file anh ben ngoai) de luon hien duoc ngay ca khi may khong co
+   * mang, va de/thay doi mau khac trong tuong lai chi can sua o day, khong can chuan bi file anh.
+   *
+   * Moi mau gom: mau nen (gradient), 1 hoa tiet lap lai theo chieu doc (hoa mai, ngoi sao, chu
+   * thap y te...), va 1 dong chu chu thich ("caption") ghim gan day sidebar.
+   */
+  const PATIENT_SCREEN_THEMES = {
+    // 'default' KHONG co trong danh sach nay - xu ly rieng (an hoan toan ca 2 sidebar, giu dung
+    // giao dien gon nhu truoc khi co tinh nang nay).
+    tet: {
+      bg: 'linear-gradient(180deg, #b3141f 0%, #7a0d14 100%)',
+      caption: 'CHÚC MỪNG NĂM MỚI',
+      captionColor: '#ffe9a8',
+      motif: 'mai-flower',
+      motifColor: '#ffd23d',
+    },
+    doctors_day: {
+      bg: 'linear-gradient(180deg, #e8f3fb 0%, #cfe6f7 100%)',
+      caption: 'NGÀY THẦY THUỐC VIỆT NAM 27/2',
+      captionColor: '#0b4a7a',
+      motif: 'medical-cross',
+      motifColor: '#d81f2a',
+    },
+    national_day: {
+      bg: 'linear-gradient(180deg, #da251d 0%, #a11813 100%)',
+      caption: 'CHÀO MỪNG QUỐC KHÁNH 2/9',
+      captionColor: '#ffe9a8',
+      motif: 'star',
+      motifColor: '#ffd400',
+    },
+    apr30_may1: {
+      bg: 'linear-gradient(180deg, #da251d 0%, #a11813 100%)',
+      caption: '30/4 - 1/5',
+      captionColor: '#ffe9a8',
+      motif: 'star-dove',
+      motifColor: '#ffd400',
+    },
+    hung_king: {
+      bg: 'linear-gradient(180deg, #5a3418 0%, #35200e 100%)',
+      caption: 'GIỖ TỔ HÙNG VƯƠNG',
+      captionColor: '#f4d799',
+      motif: 'temple',
+      motifColor: '#e3b869',
+    },
+  };
+
+  /** Toa do 1 ngoi sao 5 canh (dang "points" dung cho the SVG <polygon>), tam (cx,cy), ban kinh
+   * ngoai/trong - dung chung cho mau 'national_day' va 'apr30_may1'. */
+  function starPoints(cx, cy, outerR, innerR) {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? outerR : innerR;
+      const angle = (Math.PI / 5) * i - Math.PI / 2;
+      pts.push(`${(cx + r * Math.cos(angle)).toFixed(1)},${(cy + r * Math.sin(angle)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }
+
+  /** 1 "bong hoa mai" don gian (5 canh hoa hinh tron xep quanh nhuy vang) tai vi tri (cx, cy). */
+  function maiFlowerAt(cx, cy, r, color) {
+    let petals = '';
+    for (let i = 0; i < 5; i++) {
+      const angle = (Math.PI * 2 / 5) * i - Math.PI / 2;
+      const px = cx + r * 1.1 * Math.cos(angle);
+      const py = cy + r * 1.1 * Math.sin(angle);
+      petals += `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(r * 0.85).toFixed(1)}" fill="${color}" opacity="0.92"/>`;
+    }
+    return `<g>${petals}<circle cx="${cx}" cy="${cy}" r="${(r * 0.55).toFixed(1)}" fill="#a11813"/></g>`;
+  }
+
+  /** Bieu tuong chu thap y te (khoi vuong bo tron nen trang + dau + do o giua) tai (cx, cy). */
+  function medicalCrossAt(cx, cy, s, color) {
+    const bar = s * 0.62;
+    const thick = s * 0.24;
+    return `<g>
+      <rect x="${(cx - s / 2).toFixed(1)}" y="${(cy - s / 2).toFixed(1)}" width="${s}" height="${s}" rx="${(s * 0.18).toFixed(1)}" fill="#ffffff" opacity="0.95"/>
+      <rect x="${(cx - bar / 2).toFixed(1)}" y="${(cy - thick / 2).toFixed(1)}" width="${bar}" height="${thick}" rx="${(thick * 0.3).toFixed(1)}" fill="${color}"/>
+      <rect x="${(cx - thick / 2).toFixed(1)}" y="${(cy - bar / 2).toFixed(1)}" width="${thick}" height="${bar}" rx="${(thick * 0.3).toFixed(1)}" fill="${color}"/>
+    </g>`;
+  }
+
+  /** Hinh chim bo cau don gian (2 canh cong) tai (cx, cy) - dung kem ngoi sao cho mau 30/4 - 1/5. */
+  function doveAt(cx, cy, s, color) {
+    return `<g fill="${color}" opacity="0.95">
+      <path d="M ${cx} ${cy} q ${s * 0.9} ${-s * 0.5} ${s * 1.6} ${-s * 0.1} q ${-s * 0.7} ${s * 0.15} ${-s * 1.1} ${s * 0.55} Z"/>
+      <path d="M ${cx} ${cy} q ${-s * 0.9} ${-s * 0.5} ${-s * 1.6} ${-s * 0.1} q ${s * 0.7} ${s * 0.15} ${s * 1.1} ${s * 0.55} Z"/>
+      <circle cx="${cx}" cy="${cy}" r="${(s * 0.22).toFixed(1)}"/>
+    </g>`;
+  }
+
+  /** Ngoi den/chua don gian kieu cach dieu (mai cong nhieu tang) tai (cx, cy) - dai dien Den Hung. */
+  function templeAt(cx, cy, s, color) {
+    const layers = [0, 1, 2].map((i) => {
+      const w = s * (1.6 - i * 0.35);
+      const y = cy - i * s * 0.5;
+      return `<path d="M ${(cx - w / 2).toFixed(1)} ${y.toFixed(1)} Q ${cx} ${(y - s * 0.35).toFixed(1)} ${(cx + w / 2).toFixed(1)} ${y.toFixed(1)} L ${(cx + w / 2.6).toFixed(1)} ${(y + s * 0.16).toFixed(1)} L ${(cx - w / 2.6).toFixed(1)} ${(y + s * 0.16).toFixed(1)} Z" fill="${color}" opacity="${0.95 - i * 0.15}"/>`;
+    }).join('');
+    return `<g>${layers}<rect x="${(cx - s * 0.06).toFixed(1)}" y="${cy.toFixed(1)}" width="${(s * 0.12).toFixed(1)}" height="${(s * 0.5).toFixed(1)}" fill="${color}" opacity="0.5"/></g>`;
+  }
+
+  function motifAt(motif, cx, cy, size, color) {
+    if (motif === 'mai-flower') return maiFlowerAt(cx, cy, size * 0.32, color);
+    if (motif === 'medical-cross') return medicalCrossAt(cx, cy, size * 0.7, color);
+    if (motif === 'star') return `<polygon points="${starPoints(cx, cy, size * 0.42, size * 0.17)}" fill="${color}"/>`;
+    if (motif === 'star-dove') {
+      return `<g>
+        <polygon points="${starPoints(cx, cy - size * 0.15, size * 0.34, size * 0.14)}" fill="${color}"/>
+        ${doveAt(cx, cy + size * 0.55, size * 0.22, '#ffffff')}
+      </g>`;
+    }
+    if (motif === 'temple') return templeAt(cx, cy, size * 0.7, color);
+    return '';
+  }
+
+  /** Ve 1 sidebar (SVG viewBox doc, lap lai motif nhieu lan doc theo chieu cao) + dong chu thich
+   * ghim day sidebar. `flip` = true de doi xung ngang (sidebar phai) cho tu nhien hon thay vi lap
+   * y het sidebar trai. */
+  function renderSidebarSvg(theme, flip) {
+    const cfg = PATIENT_SCREEN_THEMES[theme];
+    if (!cfg) return '';
+    const W = 200, H = 800;
+    const positions = [90, 260, 430, 600, 750];
+    const motifs = positions
+      .map((y, i) => motifAt(cfg.motif, flip ? W - 100 : 100, y, 150 + (i % 2) * 20, cfg.motifColor))
+      .join('');
+    return `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="bg-${theme}-${flip ? 'r' : 'l'}" x1="0" y1="0" x2="0" y2="1">
+            ${cfg.bg.replace('linear-gradient(180deg, ', '').replace(')', '').split(',').map((stop, i, arr) => {
+              const [color, pos] = stop.trim().split(' ');
+              return `<stop offset="${pos || (i / (arr.length - 1) * 100 + '%')}" stop-color="${color}"/>`;
+            }).join('')}
+          </linearGradient>
+        </defs>
+        <rect x="0" y="0" width="${W}" height="${H}" fill="url(#bg-${theme}-${flip ? 'r' : 'l'})"/>
+        ${motifs}
+      </svg>
+      <div class="sidebar-caption" style="color:${cfg.captionColor};">${cfg.caption}</div>
+    `;
+  }
+
+  /** Ap dung mau trang tri sidebar - goi 1 lan luc trang tai xong (tu su kien "branding:loaded"). */
+  function applyPatientScreenTheme(theme) {
+    const left = document.getElementById('sidebarLeft');
+    const right = document.getElementById('sidebarRight');
+    if (!left || !right) return;
+    if (!theme || theme === 'default' || !PATIENT_SCREEN_THEMES[theme]) {
+      left.classList.remove('has-content');
+      right.classList.remove('has-content');
+      left.innerHTML = '';
+      right.innerHTML = '';
+      return;
+    }
+    left.innerHTML = renderSidebarSvg(theme, false);
+    right.innerHTML = renderSidebarSvg(theme, true);
+    left.classList.add('has-content');
+    right.classList.add('has-content');
+  }
+
+  /** Ap dung % phong to chu SO THU TU (PATIENT_SCREEN_NUMBER_FONT_SCALE trong .env, mac dinh
+   * 100%) qua bien CSS --number-font-scale dung trong .big-number o tren. */
+  function applyNumberFontScale(percent) {
+    const n = Number(percent);
+    document.documentElement.style.setProperty('--number-font-scale', Number.isFinite(n) && n > 0 ? n / 100 : 1);
+  }
+
+  /** Ap dung 1 lan du lieu branding (goi tu su kien "branding:loaded" HOAC tu du lieu da co san
+   * neu su kien do phat ra TRUOC KHI dang ky listener - xem giai thich chi tiet trong
+   * public/branding-header.js). */
+  function applyBrandingData(data) {
+    data = data || {};
+    applyPatientScreenTheme(data.patientScreenTheme);
+    applyNumberFontScale(data.patientScreenNumberFontScale);
+  }
+  window.addEventListener('branding:loaded', (e) => applyBrandingData(e.detail));
+  // Phong truong hop branding-header.js (nap TRUOC script nay) da fetch xong VA phat su kien
+  // "branding:loaded" ngay trong khoang thoi gian truoc khi dong addEventListener o tren duoc chay
+  // (thuong xay ra khi mang/localhost qua nhanh) - luc do window.__brandingData da co san, ap dung
+  // luon thay vi cho 1 su kien se KHONG BAO GIO den nua.
+  if (window.__brandingData) applyBrandingData(window.__brandingData);
+
+  let priorityColorMap = {};
+  let priorityLabelMap = {};
+  let currentCounterCode = '';
+
+  /**
+   * DOC SO BANG FILE AM THANH TU THU AM (khong dung Web Speech API nua - giong doc cua trinh
+   * duyet tren nhieu may KHONG co goi tieng Viet cai san nen tu dong doc bang giong TIENG ANH,
+   * nghe rat la va sai hoan toan). Thay vao do, he thong GHEP NOI TIEP cac file am thanh NGAN da
+   * thu san (dat trong thu muc /patient-screen/audio/, xem huong dan chi tiet trong
+   * audio/README.txt di kem) theo dung thu tu cau "Mời bệnh nhân có số thứ tự, <so>, vào quầy số,
+   * <so quay>.":
+   *   moi-so-thu-tu.mp3  ->  "Mời bệnh nhân có số thứ tự"
+   *   <tung chu so 0-9>  ->  doc TUNG CHU SO MOT cua so thu tu (dung 3 chu so, vi du so 7 doc la
+   *                          "không, không, bảy" - giong cach doc so o benh vien/ngan hang thuc te,
+   *                          vi chi co file tung chu so rieng le nen KHONG doc duoc theo kieu "hai
+   *                          mươi ba" ma se doc tung chu so "hai, ba")
+   *   vao-quay-so.mp3    ->  "vào quầy số"
+   *   <tung chu so>      ->  so quay (da bo chu cai dau va cac so 0 dau, vi du "Q01" -> chi doc "1")
+   *
+   * Neu THIEU 1 file am thanh nao do (chua thu am kip / dat sai ten), he thong se tu dong CHUYEN
+   * SANG doc bang giong may (Web Speech API, giong cu) cho DUNG CAU DO thay vi im lang hoan toan -
+   * dam bao man hinh luon co tieng doc trong luc dang thu am dan dan cac file con thieu.
+   */
+  const AUDIO_BASE = '/patient-screen/audio/';
+  let playToken = 0; // tang moi lan co so moi duoc goi - dung de HUY phat file cu dang do dang
+  let currentAudioEl = null;
+
+  function digitsOf(value) { return String(value).split('').filter((c) => /[0-9]/.test(c)); }
+
+  /** Luon dung du 3 chu so (VD so 7 -> "007") de doc tung chu so mot, giong cach doc so thuc te. */
+  function ticketDigitsForAudio(number) { return digitsOf(String(number).padStart(3, '0')); }
+
+  /** Bo chu cai dau + cac so 0 dau cua ma quay (VD "Q01" -> chi con chu so "1") truoc khi tach
+   * thanh tung chu so rieng de doc, tranh doc thua "không, một" cho quay so 1. */
+  function counterDigitsForAudio(code) {
+    const digits = (code || '').match(/\d+/);
+    if (!digits) return [];
+    return digitsOf(String(parseInt(digits[0], 10)));
+  }
+
+  // ----- Du phong: doc bang giong may (Web Speech API) khi thieu file am thanh thu san -----
+  let cachedVoices = [];
+  function loadVoices() { cachedVoices = window.speechSynthesis ? window.speechSynthesis.getVoices() : []; }
+  if (window.speechSynthesis) {
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }
+  function pickVietnameseFemaleVoice() {
+    const viVoices = cachedVoices.filter((v) => (v.lang || '').toLowerCase().startsWith('vi'));
+    const femaleHint = /nữ|female|hoaimy|hoài my|linh|an\b/i;
+    return (
+      viVoices.find((v) => femaleHint.test(v.name)) ||
+      viVoices[0] ||
+      cachedVoices.find((v) => femaleHint.test(v.name)) ||
+      null
+    );
+  }
+  function speakFallback(text) {
+    if (!window.speechSynthesis) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'vi-VN';
+    utter.rate = 0.75;
+    utter.pitch = 1;
+    const voice = pickVietnameseFemaleVoice();
+    if (voice) utter.voice = voice;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  }
+  function counterNumberForSpeech(code) {
+    const digits = (code || '').match(/\d+/);
+    if (!digits) return code || '';
+    return String(parseInt(digits[0], 10));
+  }
+
+  let audioEnabled = localStorage.getItem('psAudioEnabled') !== 'off';
+  function renderAudioBtn() {
+    const onIcon = document.getElementById('audioIconOn');
+    const offIcon = document.getElementById('audioIconOff');
+    if (!onIcon || !offIcon) return;
+    onIcon.style.display = audioEnabled ? 'block' : 'none';
+    offIcon.style.display = audioEnabled ? 'none' : 'block';
+  }
+  function toggleAudio() {
+    audioEnabled = !audioEnabled;
+    localStorage.setItem('psAudioEnabled', audioEnabled ? 'on' : 'off');
+    renderAudioBtn();
+    // Bam nut cung la 1 "luot tuong tac" cua nguoi dung de "mo khoa" autoplay cho ca phien voi
+    // cac trinh duyet kho tinh - phat luon 1 cau vi du (số 001, quầy 1) de nhan vien nghe thu
+    // NGAY xem cac file da thu am co ghep dung/nghe on hay chua, khong can doi co benh nhan that.
+    if (audioEnabled) announceTicket({ number: 1 });
+  }
+  renderAudioBtn();
+
+  /** Phat lien tiep tung file trong mang `files` (khong kem duoi .mp3), huy ngay neu co 1 lan goi
+   * announceTicket() moi hon xen vao giua chung (so sanh qua `token`). */
+  function playAudioSequence(files, token, fallbackText) {
+    const playStep = (idx) => {
+      if (token !== playToken) return; // da bi 1 so moi hon huy giua chung
+      if (idx >= files.length) return; // phat xong het, khong lam gi them
+      const audio = new Audio(`${AUDIO_BASE}${files[idx]}.mp3`);
+      currentAudioEl = audio;
+      audio.addEventListener('ended', () => setTimeout(() => playStep(idx + 1), 90));
+      audio.addEventListener('error', () => {
+        if (token !== playToken) return;
+        console.warn('[audio] Thiếu file âm thanh:', `${files[idx]}.mp3`, '- tạm đọc bằng giọng máy.');
+        speakFallback(fallbackText);
+      });
+      audio.play().catch(() => { if (token === playToken) speakFallback(fallbackText); });
+    };
+    playStep(0);
+  }
+
+  function announceTicket(ticket) {
+    if (!ticket) return;
+    playToken += 1;
+    const myToken = playToken;
+    if (currentAudioEl) { try { currentAudioEl.pause(); } catch (e) { /* bo qua */ } }
+    if (!audioEnabled) return;
+
+    // Neu ve co tien to (SEPARATE_PRIORITY_SEQUENCE=true, xem .env.example), doc THEM 1 file rieng
+    // cho CHU CAI tien to TRUOC cac chu so - ten file la CHINH chu cai tien to viet THUONG + ".mp3"
+    // (vi du tien to "U" -> file "u.mp3", tien to "T" -> file "t.mp3"), dat trong CUNG thu muc
+    // public/patient-screen/audio/ voi cac file so co san. Neu doi PRIORITY_SEQ_PREFIX/
+    // NORMAL_SEQ_PREFIX sang chu cai khac trong .env, can thu them file mp3 tuong ung dung ten do.
+    const prefixFile = ticket.number_prefix ? [String(ticket.number_prefix).toLowerCase()] : [];
+    const files = [
+      'moi-so-thu-tu',
+      ...prefixFile,
+      ...ticketDigitsForAudio(ticket.number),
+      'vao-quay-so',
+      ...counterDigitsForAudio(currentCounterCode),
+    ];
+    // Neu THIEU file chu cai tien to (chua kip thu/dat sai ten), su kien 'error' cua Audio se tu
+    // dong chuyen sang doc DU PHONG bang giong may (speakFallback) cho CA CAU - xem playAudioSequence()
+    // ben duoi - khong bao gio bi cam hoan toan, dung luc nao cung an toan du thu file dan dan.
+    const fallbackText =
+      `Mời bệnh nhân có số thứ tự, ${ticket.number_prefix || ''}${ticket.number}, vào quầy số, ${counterNumberForSpeech(currentCounterCode)}.`;
+    playAudioSequence(files, myToken, fallbackText);
+  }
+
+  let priorityRules = [];
+  let lastSummary = null;
+
+  // TRUOC DAY co render them 1 khoi "chú thích" (#legendBox, chi ten + cham mau, khong co so
+  // luong) o day - BO DI vi bi TRUNG LAP hoan toan noi dung voi #priorityCountBox ben duoi (cung
+  // liet ke du 8 loai doi tuong kem cham mau, nhung co THEM so luong dang cho - luon la ban day du
+  // hon), theo phan anh cua nguoi dung ve viec 2 khoi ghi chu bi lap lai nhau tren cung 1 man hinh.
+  fetch('/api/priority-rules').then((r) => r.json()).then((rules) => {
+    priorityRules = rules;
+    priorityColorMap = Object.fromEntries(rules.map((r) => [r.code, r.color]));
+    priorityLabelMap = Object.fromEntries(rules.map((r) => [r.code, r.label]));
+    if (lastSummary) renderPriorityCountBox(lastSummary);
+  });
+
+  /** Chi tiet so luong dang cho (toan he thong) theo TUNG doi tuong uu tien + doi tuong thuong -
+   * zero-fill du ca 8 loai (ke ca dang co 0 nguoi cho) theo dung thu tu rank. */
+  function renderPriorityCountBox(summary) {
+    const box = document.getElementById('priorityCountBox');
+    if (!box || !priorityRules.length) return;
+    const countByCode = Object.fromEntries((summary.waitingByPriority || []).map((r) => [r.code, r.count]));
+    box.innerHTML = priorityRules
+      .map(
+        (r) => `<span class="priority-count-chip"><span class="legend-dot" style="background:${r.color}"></span>${r.label}: <b>${countByCode[r.code] || 0}</b></span>`
+      )
+      .join('');
+  }
+
+  function update(summary) {
+    lastSummary = summary;
+    renderPriorityCountBox(summary);
+    const c = summary.counters.find((x) => String(x.counterId) === String(counterId));
+    if (!c) {
+      document.getElementById('counterLabel').textContent = 'Không tìm thấy quầy (kiểm tra ?counter=ID trên URL)';
+      return;
+    }
+    document.getElementById('counterLabel').textContent = `${c.code} - ${c.name}`;
+    currentCounterCode = c.code;
+    const numEl = document.getElementById('num');
+    // Ghep tien to hien thi ("U"/"T"...) NEU CO - xem SEPARATE_PRIORITY_SEQUENCE trong .env.example.
+    numEl.textContent = c.currentNumber != null ? `${c.currentNumberPrefix || ''}${String(c.currentNumber).padStart(3, '0')}` : '---';
+    numEl.style.color = c.currentNumber != null ? (priorityColorMap[c.currentPriorityCode] || '#1d4ed8') : '#1d4ed8';
+
+    // Ghi chu nho phia duoi so, cho biet so nay thuoc doi tuong uu tien nao (giup benh nhan/
+    // nguoi nha de nhan dien, dac biet huu ich voi 🚨 Cap cuu hoac cac doi tuong uu tien khac).
+    const labelEl = document.getElementById('priorityLabel');
+    labelEl.textContent = c.currentNumber != null ? priorityLabelMap[c.currentPriorityCode] || '' : '';
+
+    const skipped = c.skippedNumbers || [];
+    const box = document.getElementById('skippedBox');
+    if (skipped.length > 0) {
+      box.style.display = 'inline-block';
+      // LUU Y: tu khi co SEPARATE_PRIORITY_SEQUENCE, server tra `skippedNumbers` la MANG OBJECT
+      // {number, prefix} (khong con la mang so tho nhu truoc) - xem getDisplaySummary() trong
+      // src/services/ticketService.js. Ghep tien to hien thi NEU CO.
+      document.getElementById('skippedList').textContent = skipped
+        .map((s) => `${s.prefix || ''}${String(s.number).padStart(3, '0')}`)
+        .join('   •   ');
+    } else {
+      box.style.display = 'none';
+    }
+  }
+
+  /** Khi nhan vien bam "Goi lai" o man hinh quay, so hien tai se nhap nhay de thu hut chu y. */
+  function flashNumber() {
+    const numEl = document.getElementById('num');
+    numEl.classList.remove('flash-number');
+    void numEl.offsetWidth;
+    numEl.classList.add('flash-number');
+  }
+
+  socket.on('queue:summary', update);
+  socket.on('counter:called', (data) => {
+    if (String(data.counterId) === String(counterId)) { flashNumber(); announceTicket(data.ticket); }
+  });
+  socket.on('counter:reannounce', (data) => {
+    if (String(data.counterId) === String(counterId)) { flashNumber(); announceTicket(data.ticket); }
+  });
+
+  fetch('/api/display/summary').then((r) => r.json()).then(update);
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/patient-screen/sw.js', { scope: '/patient-screen/' }).catch(() => {
+      // Thuong la do trang dang mo qua HTTP thuong tren dia chi IP LAN (chua bat HTTPS) - tinh
+      // nang "cai vao man hinh chinh" se khong dung duoc nhung moi chuc nang khac van binh thuong.
+    });
+  }
+</script>
+</body>
+</html>

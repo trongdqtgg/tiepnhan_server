@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Màn hình quầy tiếp nhận</title>
+<link rel="stylesheet" href="/common.css" />
+<link rel="manifest" href="/counter/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#f3f6fb" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Màn hình quầy" />
+<meta name="mobile-web-app-capable" content="yes" />
+<style>
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  /**
+   * CHE DO WIDGET/THU GON: man hinh nay thuong duoc mo trong 1 cua so trinh duyet NHO, luon
+   * nam mot goc, dung nhu 1 "extension" phu tro cho nhan vien - vi vay chu thich dai, phan
+   * "cai dat" (chu thich mau, thu tu uu tien) duoc GOM VAO 1 popup rieng (nut banh rang ⚙️)
+   * thay vi hien thuong truc, va nhan cac nut chinh se AN BOT PHAN CHU khi cua so qua hep,
+   * chi con giu icon (van co tooltip "title" de biet no lam gi).
+   */
+  body { margin: 0; }
+  .wrap { max-width: 720px; padding: 16px; padding-left: 60px; }
+  #working.card { padding: 16px; }
+  .icon-btn-label { margin-left: 4px; }
+  .top-bar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom: 8px; }
+  .top-bar h1 { margin: 0; font-size: 16px; }
+  .top-bar button svg { width: 16px; height: 16px; }
+  .top-bar .tools { display:flex; gap:6px; }
+  .top-bar button { padding: 8px 10px; font-size: 14px; border-radius: 8px; }
+  .main-actions { display:flex; gap:8px; margin-top:16px; justify-content:center; flex-wrap:wrap; }
+  .main-actions button { flex: 1 1 auto; min-width: 90px; padding: 12px 10px; font-size: 14px; }
+  .wide-only { }
+
+  /* Cua so cang hep (kieu widget dat 1 goc man hinh) thi cang rut gon: bo chu mo ta dai, chi
+     con icon + so + 3 nut chinh + cac chip so cho theo loai uu tien. */
+  @media (max-width: 420px) {
+    .wrap { padding: 8px; }
+    #working.card { padding: 10px; border-radius: 10px; }
+    .top-bar h1 { display: none; }
+    .big-number { font-size: 64px; }
+    .wide-only { display: none !important; }
+    .icon-btn-label { display: none; }
+    .main-actions button { padding: 10px 6px; font-size: 12px; min-width: 0; }
+    #currentLabel { font-size: 12px; }
+    .wait-chip { font-size: 11px; padding: 3px 8px 3px 6px; }
+  }
+</style>
+</head>
+<body>
+<!-- Nut "Trang chủ" dung chung cho man hinh nhan vien - dua thang ve "/". -->
+<a href="/" class="home-link" title="Về trang chủ" aria-label="Về trang chủ">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+</a>
+<div class="wrap">
+  <div class="top-bar">
+    <h1>Màn hình nhân viên tiếp nhận</h1>
+    <div class="tools" id="workingTools" style="display:none;">
+      <button class="btn-secondary icon-btn" onclick="openSettingsModal()" title="Chú thích màu & Thứ tự ưu tiên">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="btn-secondary icon-btn" onclick="openSkippedModal()" title="Xem DS bỏ qua (vắng mặt)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <!-- Nut moi: "Xem số đã gọi" - danh sach TOAN BO cac so da tung duoc goi trong ngay, cua
+           TAT CA cac quay (khong chi rieng quay minh) - xem openCalledModal() trong counter.js. -->
+      <button class="btn-secondary icon-btn" onclick="openCalledModal()" title="Xem số đã gọi (tất cả các quầy)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
+      <button class="btn-secondary icon-btn" onclick="openPatientScreen()" title="Mở màn hình bệnh nhân của quầy này">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </button>
+      <button class="btn-danger icon-btn" onclick="exitSession()" title="Thoát phiên / Đổi quầy khác">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div id="pick-counter" class="card grid">
+    <div class="sub">Chọn quầy bạn đang trực:</div>
+    <div style="display:flex; gap:8px;">
+      <select id="counterSelect" style="flex:1;"></select>
+      <button class="btn-secondary icon-btn" onclick="loadCounters()" title="Tải lại danh sách quầy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        Làm mới
+      </button>
+    </div>
+    <button class="btn-primary" onclick="selectCounter()">Bắt đầu ca trực</button>
+    <button class="btn-secondary" onclick="staffLogout()" style="margin-top:8px;">Đăng xuất</button>
+  </div>
+
+  <div id="working" class="card" style="display:none;">
+    <div class="tag" id="counterName"></div>
+    <div class="muted wide-only" style="margin-top:8px;">Số đang phục vụ</div>
+    <div class="big-number" id="currentNumber">--</div>
+    <div class="muted" id="currentLabel" style="text-align:center;"></div>
+    <div id="currentAnswers" style="display:none; text-align:center; font-size:13px; font-weight:600; color:#b45309; margin-top:4px;"></div>
+
+    <div class="main-actions">
+      <button class="btn-primary icon-btn" onclick="callNext()" title="Gọi số tiếp theo (đồng thời hoàn tất số hiện tại)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        <span class="icon-btn-label">Gọi tiếp theo</span>
+      </button>
+      <button class="btn-ok icon-btn" onclick="reCallCurrent()" title="Gọi lại số hiện tại (bệnh nhân chưa nghe/để ý)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        <span class="icon-btn-label">Gọi lại</span>
+      </button>
+      <button class="btn-warn icon-btn" onclick="skip()" title="Bỏ qua (vắng mặt)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+        <span class="icon-btn-label">Bỏ qua</span>
+      </button>
+    </div>
+    <div class="muted wide-only" style="margin-top:6px; text-align:center;">
+      "Gọi số tiếp theo" đồng thời được hiểu là đã hoàn tất phục vụ số hiện tại. "Gọi lại" dùng khi
+      bệnh nhân chưa nghe/để ý số đang mời, không lấy số mới.
+    </div>
+
+    <!-- 8 nut "Gọi tiếp theo" CHI trong pham vi 1 doi tuong cu the (bo qua thu tu uu tien binh
+         thuong cua quay) - dung SONG SONG voi nut "Gọi tiếp theo" mac dinh o tren (khong thay the,
+         khong doi gi ca). Duoc ve dong bang JS (xem renderPriorityCallButtons() trong counter.js)
+         ngay khi tai xong danh sach doi tuong tu /api/priority-rules. -->
+    <div class="muted wide-only" style="margin-top:14px; text-align:center;">Gọi tiếp theo theo từng đối tượng:</div>
+    <div id="priorityCallGrid" class="priority-call-grid"></div>
+
+    <div class="muted wide-only" style="margin-top:16px; text-align:center;" id="waitingInfo"></div>
+    <div id="waitingBreakdown" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:8px;"></div>
+  </div>
+</div>
+
+<div id="settingsModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeSettingsModal()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <div style="font-weight:700; font-size:18px;">Cài đặt hiển thị</div>
+      <button class="btn-secondary" onclick="closeSettingsModal()">Đóng</button>
+    </div>
+    <div class="modal-body">
+      <div id="legendBox" style="padding:12px; background:var(--bg-soft); border:1px solid var(--border); border-radius:10px;">
+        <div class="muted" style="margin-bottom:8px;">Chú thích màu số theo đối tượng ưu tiên:</div>
+        <div id="legendList" style="display:flex; flex-wrap:wrap; gap:10px;"></div>
+      </div>
+
+      <div id="priorityOrderBox" style="margin-top:16px; padding:12px; background:var(--bg-soft); border:1px solid var(--border); border-radius:10px;">
+        <div class="muted" style="margin-bottom:4px;">Thứ tự ưu tiên gọi số (chỉ áp dụng cho quầy này):</div>
+        <div class="muted" id="priorityOrderStatus" style="margin-bottom:10px; font-size:13px;"></div>
+        <ul id="priorityOrderList" class="order-list"></ul>
+        <div style="display:flex; gap:10px; margin-top:12px; flex-wrap:wrap;">
+          <button class="btn-secondary" onclick="resetPriorityOrder()">Về mặc định hệ thống</button>
+        </div>
+        <div class="muted" style="margin-top:8px; font-size:13px;">
+          Kéo thả (⠿) để đổi thứ tự gọi số — <b>tự động lưu ngay</b> khi thả ra, không cần bấm nút
+          lưu. Thứ tự này chỉ áp dụng cho quầy hiện tại và sẽ tự động trở về mặc định hệ thống ngay
+          khi thoát phiên.
+        </div>
+      </div>
+
+      <div class="muted" style="margin-top:16px; text-align:center;">
+        Kéo cửa sổ màn hình bệnh nhân sang màn hình phụ (extend) rồi bật toàn màn hình cho bệnh
+        nhân xem. Thoát phiên sẽ mở lại quầy này cho người khác sử dụng ngay.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="skippedModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeSkippedModal()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <div style="font-weight:700; font-size:18px;">Danh sách số bị bỏ qua (vắng mặt)</div>
+      <button class="btn-secondary" onclick="closeSkippedModal()">Đóng</button>
+    </div>
+    <div class="muted" style="margin-bottom:8px;">
+      Gồm số bị bỏ qua bởi tất cả các quầy trong ngày. Bấm "Gọi lại" để gọi ngay số đó về quầy
+      của bạn — số sẽ hiển thị và nhấp nháy ngay trên màn hình bệnh nhân của quầy bạn (nếu quầy
+      đang phục vụ số khác thì số đó được xem là đã hoàn tất trước khi gọi số này).
+    </div>
+    <div class="modal-body" id="skippedModalBody">
+      <div class="muted">Đang tải...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal moi: "Xem số đã gọi" - lich su TOAN BO cac so da tung duoc goi trong ngay hom nay, cua
+     TAT CA cac quay (khong chi rieng quay dang dang nhap), moi goi gan nhat len dau - xem
+     openCalledModal()/loadCalledModal() trong counter.js va GET /api/counters/called-list. -->
+<div id="calledModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this) closeCalledModal()">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <div style="font-weight:700; font-size:18px;">Số đã gọi (tất cả các quầy)</div>
+      <button class="btn-secondary" onclick="closeCalledModal()">Đóng</button>
+    </div>
+    <div class="muted" style="margin-bottom:8px;">
+      Toàn bộ số đã được gọi trong hôm nay, của tất cả các quầy — mới gọi gần nhất hiển thị lên đầu.
+      Kèm quầy nào đã gọi, giờ gọi, và trạng thái hiện tại (đang phục vụ / đã xong / bị bỏ qua).
+    </div>
+    <div class="modal-body" id="calledModalBody">
+      <div class="muted">Đang tải...</div>
+    </div>
+  </div>
+</div>
+
+<script src="/vendor/ui-dialog.js"></script>
+<script src="/vendor/rt-client.js"></script>
+<script src="counter.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/counter/sw.js', { scope: '/counter/' }).catch(() => {
+      // Thuong la do trang dang mo qua HTTP thuong tren dia chi IP LAN (chua bat HTTPS) - tinh
+      // nang "cai vao man hinh chinh" se khong dung duoc nhung moi chuc nang khac van binh thuong.
+    });
+  }
+</script>
+</body>
+</html>

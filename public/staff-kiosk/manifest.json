@@ -1,0 +1,15 @@
+{
+  "name": "Kiosk cấp số - Nhân viên",
+  "short_name": "Kiosk cấp số",
+  "description": "Kiosk cấp số cho nhân viên tiếp nhận - hệ thống bắt số tự động",
+  "start_url": "/staff-kiosk/",
+  "scope": "/staff-kiosk/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f3f6fb",
+  "theme_color": "#f3f6fb",
+  "icons": [
+    { "src": "/staff-kiosk/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/staff-kiosk/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

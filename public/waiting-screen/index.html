@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Màn hình chờ chung</title>
+<link rel="stylesheet" href="/common.css" />
+<link rel="manifest" href="/waiting-screen/manifest.json" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="theme-color" content="#f3f6fb" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Màn hình chờ" />
+<meta name="mobile-web-app-capable" content="yes" />
+<style>
+  /**
+   * BO CUC GON: dung .app-shell (header/main/footer, xem common.css) chiem DUNG 1 man hinh
+   * (100vh, khong cuon trang) thay vi 1 khoi noi dung dai nam giua nen trong nhu truoc - can chinh
+   * lai cac khoang cach/co chu bang don vi "vh" (theo % chieu cao man hinh) de TU CO GIAN vua khit
+   * trong phan con lai (sau header/footer) tren moi kich thuoc man hinh TV/monitor thuc te, khong
+   * can cuon de thay het noi dung.
+   */
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  .waiting-main {
+    height: 100%; display: flex; flex-direction: column; justify-content: center;
+    padding: 1.5vh clamp(16px, 3vw, 40px); gap: 1.4vh; max-width: 1100px; margin: 0 auto; width: 100%;
+  }
+  h1 { font-size: clamp(18px, 2.6vh, 28px); margin: 0; }
+  .sub { margin: 0; font-size: clamp(12px, 1.5vh, 15px); }
+  table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  th, td { padding: clamp(6px, 1.4vh, 14px) 12px; text-align: center; border-bottom: 1px solid var(--border); font-size: clamp(14px, 2vh, 20px); }
+  th { color: var(--text-muted); font-weight: 600; font-size: clamp(11px, 1.3vh, 13px); text-transform: uppercase; }
+  .num { font-size: clamp(20px, 3.2vh, 38px); font-weight: 800; color: var(--accent-number); }
+  .skipped-box {
+    padding: clamp(8px, 1.4vh, 14px) 16px; background: var(--warn-bg); border: 1px solid var(--warn-border);
+    border-radius: 12px;
+  }
+  .skipped-title { color: var(--warn); font-weight: 700; margin-bottom: 4px; font-size: clamp(12px, 1.5vh, 15px); }
+  .skipped-list { font-size: clamp(16px, 2.4vh, 24px); font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+  .waiting-count { font-size: clamp(12px, 1.5vh, 15px); color: var(--text-muted); }
+  .legend-box {
+    padding: clamp(6px, 1.2vh, 10px) 14px; background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 10px; display: inline-flex; flex-wrap: wrap; gap: 10px; font-size: clamp(11px, 1.4vh, 14px);
+  }
+</style>
+</head>
+<body>
+<a class="app-home-btn" href="/" title="Về màn hình chính">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+</a>
+<div class="app-shell" id="appShell">
+  <header class="app-header">
+    <div class="app-header-brand">
+      <span class="brand-mark" id="appBrandIcon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M10 2h4v6h6v4h-6v6h-4v-6H4V8h6V2z" />
+        </svg>
+      </span>
+      <img id="appLogoImg" class="brand-logo-img" style="display:none" alt="Logo" />
+      <div class="app-header-text">
+        <div class="app-clinic-name" id="appClinicName">Đang tải...</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <div class="waiting-main">
+      <div>
+        <h1>Màn hình chờ - Đang gọi số</h1>
+        <div class="sub" id="dayLabel"></div>
+      </div>
+
+      <table>
+        <thead><tr><th>Quầy</th><th>Số đang mời</th><th>Trạng thái</th></tr></thead>
+        <tbody id="counterRows"></tbody>
+      </table>
+
+      <div class="skipped-box">
+        <div class="skipped-title">Các số đã gọi nhưng bệnh nhân vắng mặt</div>
+        <div class="skipped-list" id="skippedList">Không có</div>
+      </div>
+
+      <div class="waiting-count">Số đang chờ trong hàng đợi: <span id="waitingCount">0</span></div>
+
+      <!-- Chi tiet so luong dang cho theo TUNG doi tuong uu tien + doi tuong thuong (zero-fill du
+           ca 8 loai) - xem renderPriorityCountBox() ben duoi va class dung chung .priority-count-box
+           trong common.css. -->
+      <div class="priority-count-box" id="priorityCountBox"></div>
+    </div>
+  </main>
+
+  <footer class="app-footer" id="appFooterText"></footer>
+  <!-- Dong chan trang THU 2 (CLINIC_FOOTER_TEXT_2) - can them class "app-footer-2" (xem common.css)
+       de hien chu TO + mau XANH DUONG nhu ten don vi o header, khac voi dong 1 (chu nho, mau phu) -
+       thieu class nay la ly do dong 2 truoc day bi hien nhu dong 1 (nho, den). -->
+  <footer class="app-footer app-footer-2" id="appFooterText2" style="display:none; padding-top:0; border-top:none;"></footer>
+</div>
+
+<script src="/branding-header.js"></script>
+<script src="/vendor/rt-client.js"></script>
+<script>
+  const socket = io({ path: '/rt-bridge/' });
+  const STATUS_LABEL = { idle: 'Trống', serving: 'Đang phục vụ' };
+  let priorityColorMap = {};
+  let priorityRules = [];
+  let lastSummary = null;
+
+  // TRUOC DAY co render them 1 khoi "chú thích" (#legendBox, chi ten + cham mau, khong co so
+  // luong) o day - BO DI vi bi TRUNG LAP hoan toan noi dung voi #priorityCountBox ben duoi (cung
+  // liet ke du 8 loai doi tuong kem cham mau, nhung co THEM so luong dang cho - luon la ban day du
+  // hon), theo phan anh cua nguoi dung ve viec 2 khoi ghi chu bi lap lai nhau tren cung 1 man hinh.
+  fetch('/api/priority-rules').then((r) => r.json()).then((rules) => {
+    priorityRules = rules;
+    priorityColorMap = Object.fromEntries(rules.map((r) => [r.code, r.color]));
+    if (lastSummary) renderPriorityCountBox(lastSummary);
+  });
+
+  /** Chi tiet so luong dang cho theo TUNG doi tuong uu tien + doi tuong thuong - zero-fill du ca
+   * 8 loai (ke ca dang co 0 nguoi cho) theo dung thu tu rank, dat canh dong "Số đang chờ...". */
+  function renderPriorityCountBox(summary) {
+    const box = document.getElementById('priorityCountBox');
+    if (!box || !priorityRules.length) return;
+    const countByCode = Object.fromEntries((summary.waitingByPriority || []).map((r) => [r.code, r.count]));
+    box.innerHTML = priorityRules
+      .map(
+        (r) => `<span class="priority-count-chip"><span class="legend-dot" style="background:${r.color}"></span>${r.label}: <b>${countByCode[r.code] || 0}</b></span>`
+      )
+      .join('');
+  }
+
+  function render(summary) {
+    lastSummary = summary;
+    document.getElementById('dayLabel').textContent = 'Ngày: ' + summary.day;
+    document.getElementById('counterRows').innerHTML = summary.counters
+      .map((c) => {
+        const color = c.currentNumber != null ? (priorityColorMap[c.currentPriorityCode] || '#1d4ed8') : '#5b6b82';
+        return `<tr>
+          <td>${c.code} - ${c.name}</td>
+          <td class="num" style="color:${color}">${c.currentNumber != null ? `${c.currentNumberPrefix || ''}${String(c.currentNumber).padStart(3, '0')}` : '--'}</td>
+          <td>${STATUS_LABEL[c.status] || c.status}</td>
+        </tr>`;
+      })
+      .join('');
+
+    // LUU Y: tu khi co SEPARATE_PRIORITY_SEQUENCE, server tra `skippedNumbers` la MANG OBJECT
+    // {number, prefix} (khong con la mang so tho nhu truoc) - xem getDisplaySummary() trong
+    // src/services/ticketService.js. Ghep tien to hien thi NEU CO.
+    document.getElementById('skippedList').textContent = summary.skippedNumbers.length
+      ? summary.skippedNumbers.map((s) => `${s.prefix || ''}${String(s.number).padStart(3, '0')}`).join('   •   ')
+      : 'Không có';
+
+    document.getElementById('waitingCount').textContent = summary.waitingCount;
+    renderPriorityCountBox(summary);
+  }
+
+  socket.on('queue:summary', render);
+  fetch('/api/display/summary').then((r) => r.json()).then(render);
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/waiting-screen/sw.js', { scope: '/waiting-screen/' }).catch(() => {
+      // Thuong la do trang dang mo qua HTTP thuong tren dia chi IP LAN (chua bat HTTPS) - tinh
+      // nang "cai vao man hinh chinh" se khong dung duoc nhung moi chuc nang khac van binh thuong.
+    });
+  }
+</script>
+</body>
+</html>

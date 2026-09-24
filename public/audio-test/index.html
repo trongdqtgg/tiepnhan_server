@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nghe thử âm thanh đọc số</title>
+<link rel="stylesheet" href="/common.css" />
+<style>
+  body { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; }
+  .box { max-width: 560px; width:100%; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .hint { color:#94a3b8; font-size:14px; margin-bottom: 24px; line-height:1.6; }
+  .row { display:flex; gap:12px; margin-bottom:16px; align-items:flex-end; }
+  .field { flex:1; }
+  label { display:block; font-size:13px; color:#94a3b8; margin-bottom:6px; }
+  input[type=number] {
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid #334155;
+    background:#0f172a; color:#f1f5f9; font-size:16px;
+  }
+  button#playBtn {
+    background:#2563eb; color:#fff; border:none; border-radius:8px; padding:12px 20px;
+    font-size:15px; cursor:pointer; white-space:nowrap;
+  }
+  button#playBtn:hover { background:#1d4ed8; }
+  .status { margin-top:18px; padding:12px 14px; border-radius:8px; background:#1e293b; font-size:14px; min-height: 20px; }
+  .status.ok { border:1px solid #15803d; color:#86efac; }
+  .status.warn { border:1px solid #b45309; color:#fbbf24; }
+  .missing-list { margin-top:6px; font-family: 'Consolas', monospace; font-size: 13px; }
+  .checklist { margin-top:24px; font-size:13px; color:#64748b; }
+  .checklist code { background:#1e293b; padding:1px 5px; border-radius:4px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>🔊 Nghe thử âm thanh đọc số</h1>
+  <p class="hint">
+    Trang này để nhân viên/kỹ thuật nghe thử các file âm thanh đã thu (đặt trong
+    <code>public/patient-screen/audio/</code>) trước khi dùng thật trên màn hình bệnh nhân —
+    không ảnh hưởng tới dữ liệu hàng chờ thật của hệ thống.
+  </p>
+  <div class="row">
+    <div class="field">
+      <label for="prefixInput">Tiền tố (để trống nếu không dùng)</label>
+      <input id="prefixInput" type="text" maxlength="2" placeholder="T hoặc U" value="" />
+    </div>
+    <div class="field">
+      <label for="numInput">Số thứ tự (ví dụ)</label>
+      <input id="numInput" type="number" min="0" max="999" value="7" />
+    </div>
+    <div class="field">
+      <label for="counterInput">Số quầy (ví dụ)</label>
+      <input id="counterInput" type="number" min="0" max="99" value="1" />
+    </div>
+    <button id="playBtn">▶️ Nghe thử</button>
+  </div>
+  <div id="status" class="status">Nhập số rồi bấm "Nghe thử" để kiểm tra.</div>
+  <div class="checklist">
+    Cần đủ 12 file trong thư mục: <code>0.mp3</code> … <code>9.mp3</code>,
+    <code>moi-so-thu-tu.mp3</code>, <code>vao-quay-so.mp3</code>. Nếu dùng tính năng tách dãy số
+    ưu tiên/thường (<code>SEPARATE_PRIORITY_SEQUENCE</code>), cần thêm 1 file riêng cho mỗi chữ cái
+    tiền tố đang dùng, tên file là chính chữ cái đó viết thường (mặc định: <code>t.mp3</code>,
+    <code>u.mp3</code>). Xem chi tiết trong <code>public/patient-screen/audio/README.txt</code>.
+  </div>
+</div>
+<script>
+  const AUDIO_BASE = '/patient-screen/audio/';
+  const statusEl = document.getElementById('status');
+
+  function digitsOf(value) { return String(value).split('').filter((c) => /[0-9]/.test(c)); }
+  function ticketDigitsForAudio(number) { return digitsOf(String(number).padStart(3, '0')); }
+  function counterDigitsForAudio(number) { return digitsOf(String(parseInt(number, 10) || 0)); }
+
+  function setStatus(text, cls) {
+    statusEl.textContent = text;
+    statusEl.className = 'status' + (cls ? ' ' + cls : '');
+  }
+
+  function playSequence(files) {
+    const missing = [];
+    let idx = 0;
+    function step() {
+      if (idx >= files.length) {
+        if (missing.length) {
+          setStatus('⚠️ Thiếu ' + missing.length + ' file: ', 'warn');
+          const list = document.createElement('div');
+          list.className = 'missing-list';
+          list.textContent = missing.join(', ');
+          statusEl.appendChild(list);
+        } else {
+          setStatus('✅ Đã phát xong đủ tất cả các file, âm thanh sẵn sàng dùng thật.', 'ok');
+        }
+        return;
+      }
+      const file = files[idx];
+      setStatus('▶️ Đang phát: ' + file + '.mp3 (' + (idx + 1) + '/' + files.length + ')');
+      const audio = new Audio(AUDIO_BASE + file + '.mp3');
+      audio.addEventListener('ended', () => { idx++; setTimeout(step, 90); });
+      audio.addEventListener('error', () => { missing.push(file + '.mp3'); idx++; setTimeout(step, 10); });
+      audio.play().catch(() => { missing.push(file + '.mp3 (autoplay bị chặn hoặc thiếu file)'); idx++; setTimeout(step, 10); });
+    }
+    step();
+  }
+
+  document.getElementById('playBtn').addEventListener('click', () => {
+    const num = document.getElementById('numInput').value || '0';
+    const counter = document.getElementById('counterInput').value || '0';
+    const prefix = document.getElementById('prefixInput').value.trim().toLowerCase();
+    const files = [
+      'moi-so-thu-tu',
+      ...(prefix ? [prefix] : []),
+      ...ticketDigitsForAudio(num),
+      'vao-quay-so',
+      ...counterDigitsForAudio(counter),
+    ];
+    playSequence(files);
+  });
+</script>
+</body>
+</html>

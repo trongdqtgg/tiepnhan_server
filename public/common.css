@@ -1,0 +1,345 @@
+/**
+ * BANG MAU SANG ("light medical theme") - dung chung cho TOAN BO man hinh. Truoc day he thong
+ * dung nen toi (dark navy) nhung phan hoi thuc te la qua u toi, khong phu hop hinh anh phan mem
+ * y te (thuong can sang su, sach se, de nhin lau tren man hinh lon o quay tiep nhan/kiosk). Cac
+ * bien mau dat o :root de moi trang dung chung 1 nguon, doi mau chi can sua o day.
+ */
+:root {
+  --bg: #f3f6fb;           /* nen trang/xam rat nhat cua ca man hinh */
+  --bg-soft: #e9eef6;      /* nen phu (vi du hop trang thai, khung con) */
+  --surface: #ffffff;      /* nen the/card - luon TRANG cho tuong phan ro voi --bg */
+  --border: #dbe3ef;       /* vien nhat, tinh te */
+  --text: #0f2540;         /* chu chinh - xanh than rat dam, khong dung den thuan */
+  --text-muted: #5b6b82;   /* chu phu/mo ta */
+  --primary: #2563eb;      /* mau nhan dien chinh - xanh y te */
+  --primary-dark: #1d4ed8;
+  --accent-number: #1d4ed8; /* mau so lon hien thi (thay cho vang truoc day, ro rang hon tren nen sang) */
+  --danger: #dc2626;
+  --danger-dark: #b91c1c;
+  --warn: #b45309;
+  --warn-bg: #fff7ed;
+  --warn-border: #fdba74;
+  --ok: #15803d;
+  --shadow: 0 1px 2px rgba(15, 37, 64, 0.06), 0 1px 12px rgba(15, 37, 64, 0.05);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+/**
+ * Dai nhan dien mau xanh VNPT o SAT MEP TREN moi man hinh - chi tiet nho, nhat quan, khong choan
+ * cho noi dung (khong day layout, chi phu len tren cung). Ap dung TU DONG cho moi trang vi dung
+ * chung file common.css nay.
+ */
+body::before {
+  content: ""; position: fixed; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--primary) 0%, #0ea5e9 100%);
+  z-index: 200; pointer-events: none;
+}
+
+/**
+ * Huy hieu/logo don gian dung chung: khoi vuong bo goc mau xanh nhan dien, ben trong la 1 icon
+ * SVG net trang (mac dinh la bieu tuong "chu thap y te"). Dat truoc tieu de trang (h1) hoac ten
+ * don vi tren kiosk de tao cam giac chuyen nghiep, dung phong cach nganh y te thay vi emoji.
+ */
+.brand-mark {
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 40px; height: 40px; border-radius: 10px;
+  background: linear-gradient(135deg, var(--primary) 0%, #0ea5e9 100%);
+  color: #fff; margin-right: 12px;
+}
+.brand-mark svg { width: 22px; height: 22px; }
+/**
+ * Logo THAT (anh do don vi tu cau hinh qua KIOSK_LOGO_IMAGE trong .env, xem loadBranding() trong
+ * kiosk.js) - thay the cho .brand-mark (icon "chu thap y te" chung chung) khi co cau hinh. Dung
+ * kich thuoc/bo goc TUONG TU .brand-mark de bo cuc header khong bi nhay khi doi qua lai, nhung
+ * nen TRANG (khong dung gradient mau) va "object-fit: contain" de logo that (thuong la anh chu
+ * nhat/khong vuong) khong bi meo/cat mat.
+ */
+.brand-logo-img {
+  width: 40px; height: 40px; border-radius: 10px; flex-shrink: 0; margin-right: 12px;
+  object-fit: contain; background: #fff; border: 1px solid var(--border);
+}
+/**
+ * BO CUC "MAN HINH XEM TOAN MAN HINH" DUNG CHUNG - header (logo+ten don vi, can giua) / main
+ * (chiem het khong gian con lai, cuon rieng NEU that su can - khong lam ca trang cuon) / footer
+ * (1-2 dong tuy chinh) - dung cho cac man hinh TV/man hinh phu chi de XEM (khong thao tac) nhu
+ * /waiting-screen va /patient-screen, dong bo giao dien voi header/footer da co san o /kiosk
+ * (xem public/kiosk/index.html - trang do tu quan ly CSS rieng vi da on dinh tu truoc, khong dung
+ * lai bo class nay de tranh rui ro thay doi giao dien dang hoat dong tot). Cac trang dung bo nay
+ * tu doc .env qua API /api/branding (KIOSK_LOGO_IMAGE, CLINIC_NAME, CLINIC_FOOTER_TEXT_2) de dien
+ * vao dung cac phan tu co id tuong ung (vi du xem waiting-screen/index.html).
+ */
+.app-shell {
+  height: 100vh; min-height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+}
+.app-shell.has-bg .app-header, .app-shell.has-bg .app-footer { background: rgba(255, 255, 255, 0.85); }
+.app-header {
+  flex: 0 0 auto; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  padding: 10px clamp(16px, 3vw, 32px); border-bottom: 1px solid var(--border); background: #fff;
+}
+.app-header-brand { grid-column: 2; display: flex; align-items: center; gap: 10px; justify-content: center; min-width: 0; max-width: 100%; }
+.app-header-text { min-width: 0; text-align: center; }
+.app-clinic-name {
+  font-size: clamp(16px, 2.2vh, 24px); font-weight: 800; line-height: 1.2;
+  overflow-wrap: break-word; color: var(--text);
+}
+.app-main { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.app-footer {
+  flex: 0 0 auto; padding: 8px clamp(16px, 3vw, 32px); text-align: center; color: var(--text-muted);
+  font-size: 13px; border-top: 1px solid var(--border); background: #fff; min-height: 16px;
+}
+.app-footer-2 { font-size: clamp(16px, 2.2vh, 24px); font-weight: 800; color: var(--primary); }
+
+/**
+ * Nut Home dung chung cho cac man hinh CHI DE XEM (khong yeu cau dang nhap nhan vien) nhu
+ * /waiting-screen va /patient-screen - dan LUON ve "/" (khong can mat khau, khac voi #kioskHomeBtn
+ * o /kiosk vi 2 trang nay khong nam trong GATED_PATH_PREFIXES o src/server.js). Dat vi tri CO DINH
+ * (position: fixed) o goc TREN-TRAI man hinh thay vi nam trong header, de khong doi bo cuc header
+ * (grid 3 cot dang can giua ten don vi) va khong dam vao nut bat/tat am thanh o goc tren-phai cua
+ * /patient-screen (#audioToggleBtn, xem public/patient-screen/index.html).
+ */
+.app-home-btn {
+  position: fixed; top: 14px; left: 14px; z-index: 20;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; border: 1px solid var(--border); color: var(--text-muted);
+  padding: 8px 10px; border-radius: 10px; opacity: 0.6; cursor: pointer; text-decoration: none;
+}
+.app-home-btn:hover { opacity: 1; color: var(--primary); }
+.app-home-btn svg { width: 20px; height: 20px; display: block; }
+
+.wrap { max-width: 960px; margin: 0 auto; padding: 24px; }
+h1 { font-size: 22px; margin-bottom: 4px; color: var(--text); }
+.sub { color: var(--text-muted); margin-bottom: 24px; }
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 18px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-secondary { background: #eef2f8; color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: #e2e9f4; }
+.btn-warn { background: #fff2df; color: #92400e; border: 1px solid #fbd7a5; }
+.btn-warn:hover { background: #fde8c8; }
+.btn-danger { background: #fde8e8; color: var(--danger-dark); border: 1px solid #f7c6c6; }
+.btn-danger:hover { background: #fbd5d5; }
+.btn-ok { background: #e3f6ea; color: var(--ok); border: 1px solid #b9e6c8; }
+.btn-ok:hover { background: #d1f0dd; }
+.grid { display: grid; gap: 12px; }
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+input[type=text], input[type=password] {
+  background: #fff;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 16px;
+  width: 100%;
+}
+input[type=text]:focus, input[type=password]:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.big-number {
+  font-size: 120px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--accent-number);
+  line-height: 1;
+}
+.muted { color: var(--text-muted); font-size: 14px; }
+.tag {
+  display: inline-block;
+  background: var(--bg-soft);
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  margin-right: 6px;
+  border: 1px solid var(--border);
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(15, 37, 64, 0.15);
+}
+
+/**
+ * Cum "chi tiet so luong dang cho theo tung doi tuong" - dung chung cho /waiting-screen va
+ * /patient-screen (dat ngay canh dong "Số đang chờ trong hàng đợi"/"Số đang mời"), moi doi tuong
+ * 1 "chip" gom cham mau (trung mau so/legend) + nhan + so luong in DAM. Zero-fill du ca 8 doi
+ * tuong (ke ca dang co 0 nguoi cho) theo dung thu tu rank, xem renderPriorityCountBox() trong
+ * tung trang.
+ */
+.priority-count-box {
+  padding: 6px 14px; background: var(--bg-soft); border: 1px solid var(--border);
+  border-radius: 10px; display: inline-flex; flex-wrap: wrap; gap: 6px 16px; justify-content: center;
+}
+.priority-count-chip { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+.priority-count-chip b { color: var(--text); font-size: 15px; }
+@keyframes flash-pulse {
+  0%, 100% { transform: scale(1); text-shadow: none; }
+  50% { transform: scale(1.06); text-shadow: 0 0 30px rgba(37, 99, 235, 0.35); }
+}
+.flash-number { animation: flash-pulse 0.6s ease-in-out 3; }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(15, 37, 64, 0.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 20px;
+}
+.modal-panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px; max-width: 640px; width: 100%; max-height: 80vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 8px 40px rgba(15, 37, 64, 0.18);
+}
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.modal-body { overflow-y: auto; }
+.skip-row {
+  display: flex; align-items: center; gap: 12px; padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.skip-row:last-child { border-bottom: none; }
+.skip-row .skip-number { font-size: 28px; font-weight: 800; min-width: 60px; text-align: center; color: var(--accent-number); }
+.skip-row .skip-info { flex: 1; font-size: 14px; }
+.skip-row .skip-info .skip-name { color: var(--text); font-weight: 600; }
+.skip-row .skip-info .skip-meta { color: var(--text-muted); }
+
+.order-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.order-item {
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 8px;
+  cursor: grab; user-select: none; touch-action: none;
+}
+.order-item:active { cursor: grabbing; }
+.order-item.dragging { opacity: 0.45; border-style: dashed; }
+.order-handle { color: var(--text-muted); font-size: 18px; line-height: 1; }
+.order-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(15,37,64,0.15); }
+.order-rank { color: var(--text-muted); font-size: 13px; min-width: 20px; }
+.order-label { flex: 1; font-size: 14px; }
+
+.wait-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px;
+  background: var(--bg-soft); border: 1px solid var(--border); border-radius: 999px; font-size: 13px;
+  color: var(--text-muted);
+}
+.wait-chip .wait-count { font-weight: 700; color: var(--text); }
+
+/**
+ * 8 nut "Gọi tiếp theo CỦA RIÊNG 1 đối tượng" (7 muc uu tien + "Đối tượng thường") - dung o man
+ * hinh /counter (public/counter/counter.js, ham renderPriorityCallButtons()) DUNG CHUNG voi nut
+ * "Gọi tiếp theo" mac dinh (khong doi/khong thay the), gan mau theo dung mau cua doi tuong
+ * (priorityColorMap) de nhan vien nhan dien nhanh. Widget (public/counter/widget/) dung style
+ * rieng nho gon hon (chi con icon so, xem #priorityCallGrid trong widget/index.html), khong dung
+ * chung class nay.
+ */
+.priority-call-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+.priority-call-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px 6px 8px;
+  border-radius: 999px; font-size: 12px; font-weight: 700; color: #0f172a;
+  border: 1px solid rgba(15, 37, 64, 0.15); cursor: pointer;
+}
+.priority-call-btn:hover { filter: brightness(0.94); }
+.priority-call-btn .legend-dot { width: 10px; height: 10px; }
+
+/**
+ * Nut icon dung chung (SVG net don gian, mau theo currentColor) - thay cho emoji mau sac truoc
+ * day, cho cam giac phan mem chuyen nghiep hon. Dat trong the <a>/<button> co class "icon-link"
+ * hoac "icon-btn".
+ */
+.icon-link, .icon-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  text-decoration: none;
+}
+.icon-link svg, .icon-btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/** Nut "Trang chủ" dung chung cho cac man hinh nhan vien (goc tren-trai). */
+.home-link {
+  position: fixed; top: 14px; left: 14px; z-index: 30;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text-muted);
+  box-shadow: var(--shadow); text-decoration: none;
+}
+.home-link:hover { color: var(--primary); border-color: var(--primary); }
+.home-link svg { width: 20px; height: 20px; }
+
+/**
+ * PHIEU IN (thermal receipt) - xem public/print-receipt.js. Binh thuong AN KHOI MAT NGUOI DUNG
+ * (dua ra ngoai vung nhin bang position:fixed + left am rat lon, KHONG dung display:none) - CHI
+ * hien tren man hinh trong vi tri binh thuong khi trinh duyet dang thuc su in (@media print), luc
+ * do MOI THU KHAC tren trang deu bi an de ban in ra ĐÚNG 1 phieu gon gang, khong lan sang giao
+ * dien man hinh. Kho giay mac dinh 80mm (dung cho dong may in nhiet Epson TM-T82/TM-T88 va tuong
+ * thich - day la kho GIAY THAT (roll width) cua dong may nay, KHONG PHAI 58mm nhu gia dinh ban dau
+ * - da xac nhan qua thuc te: dat 58mm khien noi dung chi choan 1 phan ben trai, le phai con thua
+ * rat rong) - neu may in dung kho KHAC (vi du 58mm that su, dong may nho hon), doi lai gia tri
+ * "80mm" thanh kho dung o ca 3 cho trong file nay (#printReceipt width, @page size) VA trong
+ * electron-widget/main.js (hang so PAGE_WIDTH_MICRONS).
+ *
+ * LY DO KHONG DUNG display:none NHU TRUOC: electron-widget/main.js can DO CHIEU CAO THUC TE cua
+ * phieu (qua JS, el.getBoundingClientRect().height trong public/print-receipt.js) TRUOC KHI in de
+ * dat dung kho giay - 1 phan tu display:none luon co kich thuoc bang 0 nen KHONG DO DUOC (day la
+ * nguyen nhan khien ban truoc van in du giay: chieu cao do duoc luon la 0, tu dong roi ve kho giay
+ * du phong co dinh). Dung position:fixed + dua ra ngoai man hinh thay vi an han bang display:none
+ * giup phan tu VAN CO KICH THUOC THAT (do duoc binh thuong bang JS) nhung nguoi dung khong thay gi
+ * ca tren man hinh (nam ngoai vung nhin, khong anh huong bo cuc cac phan tu khac vi
+ * position:fixed).
+ */
+#printReceipt {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 80mm;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  color: #000;
+}
+@media print {
+  body::before { display: none !important; } /* dai mau xanh nhan dien - chi danh cho man hinh, khong in ra giay */
+  body > *:not(#printReceipt) { display: none !important; }
+  #printReceipt { position: static; left: auto; top: auto; width: 100%; }
+  /* Cac trang kiosk/staff-kiosk tu dat "height:100%" (hoac tuong tu) rieng cho html/body de lam
+     BO CUC TOAN MAN HINH tren man hinh (xem public/kiosk/index.html) - gia tri nay VAN CON HIEU
+     LUC luc in vi khong duoc trang do tu huy o che do print, khien html/body bi ep cao BANG
+     MAN HINH/CUA SO thuc te (co the cao hon RAT NHIEU so voi kho giay 80mm nho) thay vi CO LAI
+     dung do cao noi dung phieu - day chinh la nguyen nhan gay du/hao giay bat thuong (kho giay
+     thi nho nhung html/body van bi ep cao, buoc trinh duyet phai keo giay them de "lap day" chieu
+     cao do). O day CHU DONG tra ve "auto" (uu tien hon nho !important) chi trong pham vi in, tren
+     man hinh khong bi anh huong gi ca. */
+  html, body { height: auto !important; min-height: 0 !important; }
+  @page { size: 80mm auto; margin: 3mm; }
+}
+
+/** Trang "khong ho tro thiet bi nay" (chan tren dien thoai/may tinh bang) - dung chung. */
+.device-block-wrap {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;
+}
+.device-block-card {
+  max-width: 420px; text-align: center;
+}
+.device-block-icon { color: var(--text-muted); margin-bottom: 12px; }

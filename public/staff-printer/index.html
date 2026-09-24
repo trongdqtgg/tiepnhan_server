@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>In lại phiếu số thứ tự</title>
+<link rel="stylesheet" href="/common.css" />
+<style>
+  html, body { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+  .top-links { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; margin-left:52px; flex-wrap:wrap; gap:10px; }
+  .field-row { display:flex; flex-direction:column; gap:6px; margin-top:12px; }
+  .field-row label { font-weight:700; font-size:14px; }
+  .toggle-group { display:flex; gap:8px; flex-wrap:wrap; }
+  .toggle-btn {
+    padding:10px 16px; border-radius:10px; border:2px solid #cbd5e1; background:#fff;
+    color:#0f172a; font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .toggle-btn.active { border-color: var(--primary); background:#eff6ff; color: var(--primary-dark); }
+  .range-row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+  /**
+   * MUC 107 - "input nhập từ stt-đến stt không tương thích với màn hình cảm ứng ... phải sử dụng
+   * nút tăng giảm từng số 1": TRUOC DAY dung `<input type="number">` - tren nhieu trinh duyet/webview
+   * cam ung (dac biet Chromium nhung trong Electron/kiosk), loai input nay hay gap 2 van de: (1) 2
+   * nut tang/giam (spinner) MAC DINH cua trinh duyet chiem 1 phan dang ke chieu rong o nho (100px),
+   * de vo tinh bam nham nut +/- thay vi bam duoc vao vung go so; (2) quan trong hon - 1 so webview/
+   * trinh duyet kiosk KHONG tu bat ban phim ao (on-screen keyboard) cho `type="number"` mot cach
+   * dang tin cay, khien nguoi dung "khong the go so duoc" va buoc phai bam +/- tung nac 1 (dung
+   * NGUYEN VAN trieu chung nguoi dung phan anh). SUA: doi sang `type="text"` + `inputmode="numeric"`
+   * (van hien ban phim so tren di dong/cam ung, KHONG con spinner +/- mac dinh nua) - xem
+   * staff-printer.js (sanitizeDigitsInput()) de loc CHI cho nhap chu so (0-9), vi type="text" khong
+   * tu rang buoc dinh dang nhu type="number". Ho cua so nhap cung TANG kich thuoc (rong hon, cao
+   * hon, chu to hon) de dam bao vung cham (touch target) đủ lớn theo khuyen nghi cam ung (toi thieu
+   * ~44px chieu cao).
+   */
+  .range-row input.sttInput {
+    width:120px; min-height:44px; padding:10px 12px; border-radius:8px; border:1px solid #cbd5e1;
+    font-size:20px; font-weight:700; text-align:center;
+  }
+  #maxInfoBox { font-size:13px; color: var(--text-muted); margin-top:4px; }
+  #reprintErrorBox {
+    display:none; margin-top:12px; padding:12px; border-radius:10px; background:#fef2f2;
+    border:1px solid #fecaca; color:#991b1b; font-size:14px;
+  }
+  #reprintProgressBox {
+    display:none; margin-top:16px; padding:14px; border-radius:10px; background:#eff6ff;
+    border:1px solid #bfdbfe; color:#1e3a8a;
+  }
+  #reprintProgressText { font-weight:700; margin-bottom:10px; }
+</style>
+</head>
+<body>
+<!-- Nut "Trang chủ" dung chung style voi cac man hinh nhan vien khac (staff-kiosk, counter). -->
+<a href="/" class="home-link" title="Về trang chủ" aria-label="Về trang chủ">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/></svg>
+</a>
+<div class="wrap">
+  <div class="top-links">
+    <h1 style="margin:0;">In lại phiếu số thứ tự</h1>
+  </div>
+
+  <div class="card grid">
+    <div class="muted">
+      Dùng khi cần in lại phiếu ĐÃ CẤP trước đó (ví dụ máy in kẹt giấy, mất phiếu...) — chỉ đọc lại
+      đúng dữ liệu đã lưu, KHÔNG cấp số mới, KHÔNG ảnh hưởng đến bộ đếm/hàng chờ hiện tại.
+    </div>
+
+    <div class="field-row">
+      <label>Ngày</label>
+      <div class="toggle-group">
+        <button type="button" class="toggle-btn active" id="dayTodayBtn" onclick="selectDay('today')">Hôm nay</button>
+        <button type="button" class="toggle-btn" id="dayTomorrowBtn" onclick="selectDay('tomorrow')">Ngày mai</button>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label>Đối tượng</label>
+      <div class="toggle-group">
+        <button type="button" class="toggle-btn active" id="groupNormalBtn" onclick="selectGroup('NORMAL')">Đối tượng thường</button>
+        <button type="button" class="toggle-btn" id="groupPriorityBtn" onclick="selectGroup('PRIORITY')">Ưu tiên</button>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label>Khoảng số thứ tự cần in lại</label>
+      <div class="range-row">
+        <span class="muted">STT từ</span>
+        <input id="fromInput" class="sttInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" autocomplete="off" />
+        <span class="muted">đến</span>
+        <input id="toInput" class="sttInput" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="6" value="1" autocomplete="off" />
+      </div>
+      <div id="maxInfoBox">Đang tải số tối đa hiện có...</div>
+    </div>
+
+    <div id="reprintErrorBox"></div>
+
+    <div style="display:flex; gap:12px; margin-top:8px; flex-wrap:wrap;">
+      <button class="btn-primary" id="startReprintBtn" onclick="handleStartReprintClick()">In tuần tự</button>
+    </div>
+
+    <div id="reprintProgressBox">
+      <div id="reprintProgressText"></div>
+      <button type="button" class="btn-secondary" onclick="stopReprint()">Dừng</button>
+    </div>
+  </div>
+</div>
+
+<!-- Input an, danh cho printReceipt() dung chung (khong can quet gi o man hinh nay). -->
+<script src="/vendor/ui-dialog.js"></script>
+<script src="/print-receipt.js"></script>
+<script src="staff-printer.js"></script>
+</body>
+</html>

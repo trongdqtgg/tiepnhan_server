@@ -1,0 +1,9 @@
+node_modules/
+release/
+publish-extra/
+# Cau hinh that (mat khau) va du lieu SQLite - KHONG day len GitHub
+.env
+data/*.db
+data/*.db-shm
+data/*.db-wal
+*.log
