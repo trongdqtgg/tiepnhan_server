@@ -5432,44 +5432,39 @@ thuần túy không có chuột.
   trình duyệt thường trên máy tính/điện thoại cá nhân, nút này sẽ không hiện — đúng như mong muốn vì
   lúc đó không có ứng dụng Electron nào để "thoát" cả.
 
-## 110. Phát hành bản server lên GitHub Release bằng `publish.bat`
+## 110. Phát hành bản server lên GitHub Release bằng `build-and-publish.bat`
 
-Server và widget phát hành **riêng biệt**: mỗi dự án có `publish.bat` + `publish.config.bat` của
-riêng mình, tag riêng (`server-v…` / `widget-v…`), nên dùng 2 repo riêng hay chung 1 repo đều được.
+(Thay cho `publish.bat` + `publish.config.bat` ở bản trước — đổi theo đúng mẫu `build-and-publish.bat`
+đơn vị đang dùng cho các ứng dụng khác: cấu hình repo trong `package.json`, nhập `GH_TOKEN` ẩn ký tự,
+hỏi Y/N rồi build + publish. KHÔNG cần cài GitHub CLI.)
 
-**Chuẩn bị 1 lần trên máy build (Windows):**
-1. Cài Node.js ≥ 22.5 (x64) và GitHub CLI: https://cli.github.com
-2. Chạy `gh auth login` (đăng nhập tài khoản có quyền ghi vào repo).
-3. Tạo repo trên GitHub (có ít nhất 1 commit, ví dụ tick "Add a README"), rồi sửa
-   `publish.config.bat`: `set "GH_REPO=ten-tai-khoan/ten-repo"`.
+**Chuẩn bị 1 lần:**
+1. Máy build Windows cài Node.js ≥ 22.5 (x64).
+2. Tạo repo GitHub cho server (có ít nhất 1 commit, ví dụ tick "Add a README"), sửa `package.json`:
+   ```json
+   "build": { "publish": [ { "provider": "github", "owner": "ten-tai-khoan", "repo": "ten-repo-server" } ] }
+   ```
+3. Tạo token GitHub (Fine-grained token → quyền **Contents: Read and write** cho repo đó). Có thể đặt sẵn
+   biến môi trường `GH_TOKEN`; không có thì script tự hỏi (ký tự được ẩn khi nhập).
 
-**Phát hành:** nhấp đúp `publish.bat` hoặc chạy trong cmd:
+**Phát hành:** tăng `"version"` trong `package.json` (phải lớn hơn bản đã phát hành) → nhấp đúp
+`build-and-publish.bat` → nhập token → bấm **Y**. Script chạy:
+- `scripts/build-release.js` — kiểm tra cú pháp mọi file `.js`, chép `src\`, `public\`, cài thư viện
+  production (`npm ci --omit=dev`), kèm `node\node.exe` của máy build, nén
+  `release\HeThongBatSo-Server-vX.Y.Z.zip` + file `.sha256`. (Chạy riêng: `npm run release:build`,
+  thêm `--no-node` nếu không muốn kèm node.exe.)
+- `scripts/github-release.js` — gọi thẳng GitHub REST API: tạo release `vX.Y.Z` ở dạng nháp → upload đủ
+  file trong `release\` → mới công khai. Tag đã tồn tại → dừng, báo tăng version. Lần trước lỗi giữa
+  chừng để lại bản nháp cùng tag → tự xoá rồi tạo lại. Nội dung release lấy từ `RELEASE_NOTES.md` nếu có.
 
-| Lệnh | Tác dụng |
-|---|---|
-| `publish.bat` | Phát hành đúng version trong `package.json` |
-| `publish.bat patch` / `minor` / `major` | Tăng version rồi phát hành |
-| `publish.bat --draft` | Tạo release nháp, tự bấm "Publish release" trên GitHub sau |
-| `publish.bat --build-only` | Chỉ build `release\HeThongBatSo-Server-vX.Y.Z.zip`, không upload |
-| `publish.bat --no-node` | Không kèm `node.exe` (máy cài phải tự có Node.js) |
+**Gói zip** gồm `src\`, `public\`, `node_modules\` (production), `package.json`, `.env.example`,
+`kiosk-questions.example.json`, `data\` rỗng, `start-server.bat`, `node\node.exe` — máy khách giải nén
+rồi chạy `start-server.bat`, không cần cài Node.js/Internet. **Cố ý không đóng gói** `.env`,
+`data\*.db`, `kiosk-questions.json` → cập nhật bằng cách tắt server, giải nén đè lên thư mục cũ.
 
-**Gói zip gồm:** `src\`, `public\`, `node_modules\` (chỉ thư viện production), `package.json`,
-`.env.example`, `data\` (rỗng), `start-server.bat`, và `node\node.exe` (lấy từ máy build) — máy
-khách chỉ cần giải nén rồi chạy `start-server.bat`, không cần cài Node.js hay có mạng internet. Kèm
-file `.sha256` để kiểm tra file tải về không bị hỏng.
-
-**Cố ý KHÔNG đóng gói** `.env` (mật khẩu thật) và `data\*.db` (dữ liệu bệnh nhân). Khi cập nhật: tắt
-server, giải nén đè lên thư mục cũ — `.env` và dữ liệu được giữ nguyên. Lần đầu chạy,
-`start-server.bat` tự tạo `.env` từ `.env.example`.
-
-**Tuỳ chọn:**
-- `RELEASE_NOTES.md` ở thư mục gốc (nếu có) được dùng làm nội dung release; không có thì tự sinh.
-- Mọi file bỏ vào thư mục `publish-extra\` (ví dụ bộ cài Inno Setup, bản `.exe` ẩn mã nguồn) được
-  upload kèm vào cùng release.
-- Release luôn được tạo ở dạng nháp → upload đủ file → mới công khai, tránh người khác tải phải bản
-  thiếu file. Nếu lỗi giữa chừng, release còn ở dạng nháp: xoá trên GitHub rồi chạy lại.
-- `.gitignore` đã chặn `.env`, `data\*.db`, `node_modules\`, `release\` nếu bạn đẩy mã nguồn lên
-  GitHub.
+Đã kiểm chứng: build zip thật (đúng nội dung, không lọt `.env`/CSDL); publish với 1 máy chủ giả lập
+GitHub API: tạo nháp → upload zip + sha256 → công khai; token sai → báo 401; chạy lại cùng version →
+báo đã tồn tại. Chưa chạy `.bat` trên Windows thật.
 
 ## 111. Loại bỏ toàn bộ hộp thoại native `alert()`/`confirm()` (tránh widget mất quyền nhập liệu)
 
@@ -5546,7 +5541,7 @@ và báo lỗi trong cửa sổ server. Hướng dẫn từng trường nằm ng
 `text` (câu hỏi), `options[].label` (chữ trên nút), `options[].stop` (chọn thì kết thúc),
 `printLabel` (dòng in trên phiếu), `answerTimeoutSeconds`, `inputTimeoutSeconds`, `flows.scan` /
 `flows.noId` (thứ tự câu), `enabled: false` (tắt hẳn, kiosk hoạt động như cũ).
-Bản phát hành (`publish.bat`) chỉ kèm file mẫu `.example.json`, nên giải nén đè bản mới không ghi đè
+Bản phát hành (`build-and-publish.bat`) chỉ kèm file mẫu `.example.json`, nên giải nén đè bản mới không ghi đè
 `kiosk-questions.json` của đơn vị. Nếu đóng gói bằng Inno Setup, thêm file này với cờ `onlyifdoesntexist`
 giống `.env`.
 
@@ -5620,3 +5615,47 @@ cửa sổ. Đã kiểm tra ở 1024×768, 1280×900, 1920×1080, 768×1024 và 
   (chìa khóa), QR máy chủ (máy chủ), Quản lý quầy (bánh răng). Rê chuột/chạm → icon đổi sang nền đậm.
 - Icon là SVG viết thẳng trong `public/index.html` — không tải thư viện/font từ Internet (chạy được trong
   mạng LAN nội bộ không có Internet). Menu rộng 3 thẻ/hàng trên máy tính, 2 thẻ/hàng trên điện thoại.
+
+## 115. Kiểm tra & bổ sung chế độ tự khởi động cùng Windows cho gói phát hành GitHub
+
+**Kết quả kiểm tra:** cơ chế tự khởi động (Task Scheduler, mục 31/39/40) trước đây nằm trong
+`packaging/windows-installer/` (bộ cài Inno Setup) — thư mục này **không có** trong mã nguồn hiện tại,
+và gói zip phát hành qua `build-and-publish.bat` (mục 110) chỉ có `start-server.bat` (chạy có cửa sổ,
+đóng cửa sổ là server dừng) → cài từ GitHub Release **chưa** tự khởi động cùng Windows. Đã bổ sung
+thẳng vào gói zip (thư mục `release-template/`):
+
+| File (trong thư mục cài) | Tác dụng | Quyền Admin |
+|---|---|---|
+| `install-autostart.bat` | Bật tự khởi động + chạy nền ngay, chờ tới khi server phản hồi | Tự xin |
+| `status-server.bat` | Tự khởi động bật chưa, server có chạy không, 15 dòng log gần nhất | Không |
+| `stop-server.bat` | Dừng server đang chạy nền | Tự xin |
+| `uninstall-autostart.bat` | Dừng + tắt tự khởi động | Tự xin |
+| `start-server.bat` | Chạy có cửa sổ để xem lỗi (tự từ chối nếu server đang chạy nền) | Không |
+| `tools\service.ps1`, `tools\run-service.bat` | Phần xử lý bên trong | — |
+
+**Cơ chế** (giữ đúng các quyết định đã chốt ở mục 31/39/40, sửa thêm các điểm yếu):
+- Tác vụ Task Scheduler `HeThongBatSo_AutoStart`, chạy **lúc Windows khởi động** (trễ 20 giây) bằng tài
+  khoản **SYSTEM** — không cần ai đăng nhập, không hiện cửa sổ, đăng xuất/đóng cửa sổ không ảnh hưởng.
+  Trùng tên với tác vụ của bộ cài cũ → cài bản mới sẽ ghi đè, không bị chạy 2 server.
+- Tạo tác vụ bằng file XML (`schtasks /xml`) thay vì tham số dòng lệnh để đặt được: **không giới hạn thời
+  gian chạy** (mặc định Windows tự dừng tác vụ sau 72 giờ), **vẫn chạy khi máy dùng pin**, chạy bù nếu lỡ lịch.
+- `tools\run-service.bat` chạy server, **ghi log** vào `logs\server.log` (tự xoay vòng khi > 5 MB) và
+  **tự chạy lại sau 10 giây** nếu server bị tắt/lỗi (dùng `ping` để chờ vì `timeout` lỗi ngay khi không có
+  cửa sổ console).
+- `install-autostart.bat` tự dừng server đang chạy tay/bản cũ trước (tránh 2 server tranh cổng làm
+  server nhảy sang `PORT+1`), cấp quyền ghi thư mục cho nhóm Users (SID `S-1-5-32-545`, không phụ thuộc
+  ngôn ngữ Windows — server chạy bằng SYSTEM tạo CSDL, sau này chạy tay vẫn ghi được), ghi đường dẫn
+  `node.exe` tuyệt đối cho tài khoản SYSTEM (PATH của SYSTEM có thể không có Node cài riêng).
+- `stop-server.bat` chỉ dừng đúng tiến trình của **thư mục cài này** (so khớp đường dẫn đầy đủ
+  `src\server.js` / `run-service.bat` trong dòng lệnh), dừng vòng lặp tự chạy lại trước rồi mới dừng node.
+- Đường dẫn chỉ dùng ngoài khối `( )` và lệnh `cmd /c ""..."""` bọc 2 lớp nháy → thư mục có dấu ngoặc
+  như `Program Files (x86)` không làm hỏng lệnh (bài học mục 35). PowerShell viết tương thích 2.0 (Windows 7).
+
+**Cài đặt trên máy chủ:** giải nén zip (nên vào ổ khác ổ Windows, vd `D:\HeThongBatSo`) → chạy
+`install-autostart.bat` 1 lần → xong. Cập nhật: `stop-server.bat` → giải nén đè → `install-autostart.bat`.
+
+**Đã kiểm chứng:** quét tự động mọi file `.bat` (dấu ngoặc/nháy cân bằng, không có biến đường dẫn trong
+khối lệnh); XML tác vụ dựng từ `service.ps1` với đường dẫn chứa `(x86)` và `&` là XML hợp lệ, đúng
+SYSTEM/PT0S/tham số; build lại zip có đủ các file. **Chưa chạy thật trên Windows** (môi trường hiện tại là
+Linux, không có PowerShell) — cần thử 1 lần: chạy `install-autostart.bat`, khởi động lại máy, KHÔNG đăng
+nhập, mở `http://<IP máy chủ>:4000` từ máy khác; rồi chạy `status-server.bat` xem log.

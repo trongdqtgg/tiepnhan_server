@@ -1,6 +1,6 @@
 {
   "name": "queue-system-nodesqlite",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "description": "He thong bat so tu dong (uu tien theo doi tuong) - Node.js + node:sqlite (built-in, khong can cai native module) + Socket.io",
   "main": "src/server.js",
   "engines": {
@@ -10,7 +10,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed:counters": "node scripts/seedCounters.js",
-    "publish:github": "publish.bat"
+    "release:build": "node scripts/build-release.js",
+    "release:publish": "node scripts/github-release.js"
   },
   "license": "UNLICENSED",
   "dependencies": {
@@ -22,5 +23,14 @@
     "node-thermal-printer": "^4.4.4",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.1"
+  },
+  "build": {
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "trongdqtgg",
+        "repo": "tiepnhan_server"
+      }
+    ]
   }
 }
