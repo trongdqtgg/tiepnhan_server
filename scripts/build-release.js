@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 /**
- * Dong goi SERVER thanh file zip de phat hanh (goi tu build-and-publish.bat, hoac: npm run release:build).
+ * Dong goi SERVER thanh BO CAI DAT Setup.exe (NSIS) + file zip de phat hanh (goi tu build-and-publish.bat, hoac: npm run release:build).
  *
- *   node scripts/build-release.js            -> release/HeThongBatSo-Server-v<version>.zip (+ .sha256)
+ *   node scripts/build-release.js            -> release/HeThongBatSo-Server-Setup-<version>.exe (bo cai)
+ *                                               + release/HeThongBatSo-Server-v<version>.zip (ban giai nen) + .sha256
  *   node scripts/build-release.js --no-node  -> khong kem node.exe (may cai dat tu cai Node.js >= 22.5)
  *
  * Goi zip gom: src/, public/, node_modules/ (CHI thu vien production), package.json, .env.example,
@@ -51,7 +52,7 @@ function listJs(dir, skip) {
 }
 
 // ---------- [1] Kiem tra cu phap ----------
-console.log(`[1/4] Kiem tra cu phap source (version ${VERSION})...`);
+console.log(`[1/5] Kiem tra cu phap source (version ${VERSION})...`);
 const [major, minor] = process.versions.node.split('.').map(Number);
 if (!(major > 22 || (major === 22 && minor >= 5))) fail('Can Node.js >= 22.5 de build server.');
 const files = [
@@ -75,7 +76,7 @@ for (const req of ['src/server.js', 'package-lock.json', '.env.example', 'releas
 console.log(`      OK - ${files.length} file .js`);
 
 // ---------- [2] Sao chep vao thu muc dong goi ----------
-console.log('[2/4] Sao chep ma nguon vao thu muc dong goi...');
+console.log('[2/5] Sao chep ma nguon vao thu muc dong goi...');
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.mkdirSync(STAGE, { recursive: true });
 fs.cpSync(path.join(ROOT, 'src'), path.join(STAGE, 'src'), { recursive: true });
@@ -88,7 +89,7 @@ fs.writeFileSync(path.join(STAGE, 'data', '.gitkeep'), '');
 fs.cpSync(path.join(ROOT, 'release-template'), STAGE, { recursive: true });
 
 // ---------- [3] Cai thu vien production ----------
-console.log('[3/4] Cai thu vien production (npm ci --omit=dev)...');
+console.log('[3/5] Cai thu vien production (npm ci --omit=dev)...');
 if (!run('npm', ['ci', '--omit=dev', '--no-audit', '--no-fund', '--loglevel=error'], { cwd: STAGE })) {
   fail('npm ci that bai.');
 }
@@ -102,8 +103,8 @@ if (WITH_NODE) {
   }
 }
 
-// ---------- [4] Nen zip + checksum ----------
-console.log('[4/4] Nen file zip...');
+// ---------- [4] Nen zip (ban giai nen - nang cao) ----------
+console.log('[4/5] Nen file zip (ban giai nen)...');
 let zipped = false;
 if (IS_WIN) {
   // tar.exe (bsdtar) co san tu Windows 10 1803 - nhanh hon Compress-Archive nhieu
@@ -117,10 +118,66 @@ if (IS_WIN) {
   zipped = run('zip', ['-qr', ZIP, PKG_NAME], { cwd: OUT });
 }
 if (!zipped || !fs.existsSync(ZIP)) fail('Nen zip that bai.');
-const hash = crypto.createHash('sha256').update(fs.readFileSync(ZIP)).digest('hex');
-fs.writeFileSync(`${ZIP}.sha256`, `${hash}  ${path.basename(ZIP)}\n`);
-fs.rmSync(STAGE, { recursive: true, force: true }); // chi giu lai file zip + sha256 de upload
 
-const mb = (fs.statSync(ZIP).size / 1024 / 1024).toFixed(1);
-console.log(`      ${path.relative(ROOT, ZIP)} (${mb} MB)`);
-console.log(`      ${path.relative(ROOT, ZIP)}.sha256`);
+// ---------- [5] Bo cai dat Setup.exe (NSIS) ----------
+console.log('[5/5] Tao bo cai dat Setup.exe (NSIS)...');
+const SETUP = path.join(OUT, `${ASSET_NAME}-Setup-${VERSION}.exe`);
+const makensis = findMakensis();
+if (!makensis) {
+  fail('Khong tim thay NSIS (makensis) de tao bo cai dat.\n' +
+    '     Cai 1 lan: winget install NSIS.NSIS   (hoac tai https://nsis.sourceforge.io/Download)\n' +
+    '     roi chay lai. (Da tung build widget bang electron-builder tren may nay thi thuong da co san.)');
+}
+console.log(`      makensis: ${makensis}`);
+const nsisArgs = [
+  '-V2', '-INPUTCHARSET', 'UTF8',
+  `-DVERSION=${VERSION}`,
+  `-DSTAGE=${STAGE}`,
+  `-DOUTFILE=${SETUP}`,
+  `-DICON=${path.join(ROOT, 'installer', 'icon.ico')}`,
+];
+if (fs.existsSync(path.join(STAGE, 'node', 'node.exe'))) nsisArgs.push('-DHAS_NODE');
+nsisArgs.push(path.join(ROOT, 'installer', 'server-installer.nsi'));
+if (!run(makensis, nsisArgs, { shell: false })) fail('Tao bo cai dat that bai (xem loi makensis o tren).');
+
+for (const f of [SETUP, ZIP]) {
+  const hash = crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+  fs.writeFileSync(`${f}.sha256`, `${hash}  ${path.basename(f)}\n`);
+}
+fs.rmSync(STAGE, { recursive: true, force: true }); // chi giu lai file de upload
+
+for (const f of [SETUP, ZIP]) {
+  const mb = (fs.statSync(f).size / 1024 / 1024).toFixed(1);
+  console.log(`      ${path.relative(ROOT, f)} (${mb} MB)`);
+}
+
+/**
+ * Tim makensis: bien MAKENSIS -> PATH -> thu muc cai NSIS mac dinh -> bo NSIS ma electron-builder
+ * da tai ve khi build widget (%LOCALAPPDATA%\electron-builder\Cache\nsis) -> tu cai qua winget.
+ */
+function findMakensis() {
+  const exe = IS_WIN ? 'makensis.exe' : 'makensis';
+  const candidates = [];
+  if (process.env.MAKENSIS) candidates.push(process.env.MAKENSIS);
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) if (dir) candidates.push(path.join(dir, exe));
+  if (IS_WIN) {
+    for (const base of [process.env['ProgramFiles(x86)'], process.env.ProgramFiles]) {
+      if (base) candidates.push(path.join(base, 'NSIS', 'makensis.exe'), path.join(base, 'NSIS', 'Bin', 'makensis.exe'));
+    }
+    const cache = path.join(process.env.LOCALAPPDATA || '', 'electron-builder', 'Cache', 'nsis');
+    if (fs.existsSync(cache)) {
+      for (const d of fs.readdirSync(cache)) {
+        candidates.push(path.join(cache, d, 'makensis.exe'), path.join(cache, d, 'Bin', 'makensis.exe'));
+      }
+    }
+  }
+  const found = candidates.find((c) => { try { return fs.statSync(c).isFile(); } catch { return false; } });
+  if (found || !IS_WIN || process.env.NO_AUTO_INSTALL_NSIS) return found || null;
+  // Tu cai NSIS qua winget (co san tren Windows 10/11) - chi 1 lan
+  console.log('      Chua co NSIS - dang tu cai qua winget (NSIS.NSIS)...');
+  if (run('winget', ['install', '--id', 'NSIS.NSIS', '-e', '--silent', '--accept-package-agreements', '--accept-source-agreements'])) {
+    process.env.NO_AUTO_INSTALL_NSIS = '1';
+    return findMakensis();
+  }
+  return null;
+}

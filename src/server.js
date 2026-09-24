@@ -41,6 +41,9 @@ const serverInfoRouter = require('./routes/serverInfo');
 const kioskConfigRouter = require('./routes/kioskConfig');
 const brandingRouter = require('./routes/branding');
 const patientScreenManifestRouter = require('./routes/patientScreenManifest');
+// MUC 117: kiem tra/cap nhat server tu GitHub Release (chay ngam + nut o trang chu)
+const updateRouter = require('./routes/update');
+const { startBackgroundChecks } = require('./services/updateService');
 
 async function main() {
   const app = express();
@@ -233,6 +236,8 @@ async function main() {
   app.use('/api/server-info', serverInfoRouter());
   app.use('/api/kiosk-config', kioskConfigRouter());
   app.use('/api/branding', brandingRouter());
+  app.use('/api/update', updateRouter());
+  startBackgroundChecks();
 
   app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date() }));
 

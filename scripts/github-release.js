@@ -85,16 +85,19 @@ function explain(r) {
 
   const notesFile = path.join(ROOT, 'RELEASE_NOTES.md');
   const zipName = files.map((f) => path.basename(f)).find((n) => n.endsWith('.zip')) || '';
+  const setupName = files.map((f) => path.basename(f)).find((n) => n.endsWith('-Setup-' + VERSION + '.exe')) || '';
   const body = fs.existsSync(notesFile)
     ? fs.readFileSync(notesFile, 'utf8')
     : [
         `Bản phát hành SERVER v${VERSION}`,
         '',
-        `**Cài mới:** giải nén \`${zipName}\` vào ổ đĩa (vd \`D:\\HeThongBatSo\`), chạy \`install-autostart.bat\` 1 lần — server chạy nền ngay và **tự khởi động cùng Windows** (không cần đăng nhập). Sửa \`.env\` (mật khẩu, tên đơn vị) rồi chạy lại \`install-autostart.bat\`.`,
+        `**Cài đặt (khuyên dùng):** tải \`${setupName}\`, chạy trên máy chủ → Tiếp → Cài đặt. Máy chủ tự chạy nền và **tự khởi động cùng Windows** (không cần đăng nhập). Bộ cài tự chọn ổ đĩa khác ổ Windows (vd \`D:\\HeThongBatSo\`).`,
         '',
-        '**Các file quản lý:** `status-server.bat` (xem trạng thái + log), `stop-server.bat` (dừng), `uninstall-autostart.bat` (tắt tự khởi động), `start-server.bat` (chạy có cửa sổ để xem lỗi).',
+        '**Cập nhật:** chạy bộ cài bản mới đè lên — tự dừng máy chủ, giữ nguyên `.env`, dữ liệu (`data\\`), `kiosk-questions.json`, ảnh đơn vị trong `public\\`, rồi tự chạy lại.',
         '',
-        '**Cập nhật:** chạy `stop-server.bat`, giải nén ĐÈ LÊN thư mục cũ, chạy lại `install-autostart.bat`. `.env`, `kiosk-questions.json` và thư mục `data\\` không nằm trong gói nên không bị ghi đè.',
+        '**Quản lý:** Start Menu → *Hệ thống bắt số - Server*: Trạng thái, Dừng, Khởi động lại, Chạy có cửa sổ (chẩn đoán lỗi), Gỡ cài đặt.',
+        '',
+        `*Nâng cao:* \`${zipName}\` là bản giải nén (không cần cài) — giải nén rồi chạy \`install-autostart.bat\`.`,
       ].join('\n');
 
   console.log(`Tao release ${TAG} (dang nhap)...`);
@@ -118,7 +121,7 @@ function explain(r) {
     const name = path.basename(f);
     const buf = fs.readFileSync(f);
     process.stdout.write(`Upload ${name} (${(buf.length / 1024 / 1024).toFixed(1)} MB)... `);
-    const type = name.endsWith('.zip') ? 'application/zip' : 'text/plain';
+    const type = name.endsWith('.zip') ? 'application/zip' : name.endsWith('.exe') ? 'application/vnd.microsoft.portable-executable' : 'text/plain';
     const up = await gh('POST', `${UPLOADS}/repos/${REPO}/releases/${id}/assets?name=${encodeURIComponent(name)}`, buf, {
       'Content-Type': type,
       'Content-Length': String(buf.length),

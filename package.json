@@ -1,6 +1,6 @@
 {
   "name": "queue-system-nodesqlite",
-  "version": "2.0.1",
+  "version": "4.0.0",
   "description": "He thong bat so tu dong (uu tien theo doi tuong) - Node.js + node:sqlite (built-in, khong can cai native module) + Socket.io",
   "main": "src/server.js",
   "engines": {

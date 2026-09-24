@@ -64,6 +64,23 @@
    * cuoi file), an hoan toan khi mo bang trinh duyet thuong (khong co gi de "thoát ứng dụng" ca).
    */
   #exitAppLink { left: auto; right: 14px; display: none; }
+  /* MUC 117: cham do "co ban moi" tren the Cap nhat phan mem + hop cap nhat */
+  .update-badge { position:absolute; top:12px; right:12px; width:14px; height:14px; border-radius:50%;
+    background:#dc2626; box-shadow:0 0 0 3px #fee2e2; animation: updPulse 1.6s ease-in-out infinite; }
+  @keyframes updPulse { 50% { box-shadow:0 0 0 7px rgba(220,38,38,.12); } }
+  #updateModal { display:none; position:fixed; inset:0; background:rgba(15,23,42,.55); z-index:9999;
+    align-items:center; justify-content:center; padding:16px; }
+  #updateModal .card { max-width:560px; width:100%; max-height:calc(100vh - 32px); overflow:auto; text-align:left; }
+  .upd-section { border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-top:12px; }
+  .upd-head { display:flex; justify-content:space-between; align-items:center; gap:10px; font-weight:800; font-size:17px; }
+  .upd-pill { font-size:12px; font-weight:700; padding:3px 10px; border-radius:99px; background:#e2e8f0; color:#334155; white-space:nowrap; }
+  .upd-pill.new { background:#fee2e2; color:#b91c1c; } .upd-pill.ok { background:#dcfce7; color:#15803d; }
+  .upd-line { font-size:14px; margin-top:6px; color:var(--text); }
+  .upd-muted { font-size:13px; color:var(--text-muted); margin-top:4px; }
+  .upd-notes { white-space:pre-wrap; font-size:13px; background:var(--bg-soft); border-radius:8px; padding:10px; margin-top:8px; max-height:160px; overflow:auto; }
+  .upd-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .upd-actions button, .upd-actions a { font-size:14px; padding:9px 14px; }
+  .upd-err { color:var(--danger); font-size:13px; margin-top:6px; }
 </style>
 </head>
 <body>
@@ -179,6 +196,12 @@
     <div class="card choice-card" onclick="location.href='/counter-admin'">
       <div class="choice-icon" style="--ic:#475569;--ib:#e2e8f0;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
       <div class="choice-title">Quản lý quầy tiếp nhận</div>
+    </div>
+    <!-- MUC 117: kiem tra/cap nhat phan mem (server + widget) - cham do khi co ban moi -->
+    <div class="card choice-card" id="updateMenuCard" onclick="openUpdateModal()" style="position:relative;">
+      <span id="updateBadge" class="update-badge" style="display:none;" title="Có phiên bản mới"></span>
+      <div class="choice-icon" style="--ic:#dc2626;--ib:#fee2e2;" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/><path d="M12 8v5l3 2"/></svg></div>
+      <div class="choice-title">Cập nhật phần mềm</div>
     </div>
   </div>
 
@@ -315,6 +338,7 @@
       } else {
         document.getElementById('loginBox').style.display = 'none';
         document.getElementById('staffMenuBox').style.display = 'flex';
+        refreshUpdateBadge();
       }
     } catch (err) {
       errBox.textContent = 'Không kết nối được máy chủ, vui lòng thử lại.';
@@ -343,6 +367,7 @@
           document.querySelector('.choices').style.display = 'none';
           document.getElementById('loginBox').style.display = 'none';
           document.getElementById('staffMenuBox').style.display = 'flex';
+          refreshUpdateBadge();
         }
         return;
       }
@@ -525,6 +550,165 @@
       // Thuong la do trang dang mo qua HTTP thuong tren dia chi IP LAN (chua bat HTTPS) - tinh
       // nang "cai vao man hinh chinh" se khong dung duoc nhung moi chuc nang khac van binh thuong.
     });
+  }
+</script>
+<!-- MUC 117: hop Cap nhat phan mem (server + widget tren may nay) -->
+<div id="updateModal" onclick="if (event.target === this) closeUpdateModal()">
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-size:20px; font-weight:800;">Cập nhật phần mềm</div>
+      <button class="btn-secondary" onclick="closeUpdateModal()" style="padding:6px 12px;">Đóng</button>
+    </div>
+    <div class="upd-muted">Hệ thống tự kiểm tra ngầm định kỳ (máy chủ mỗi 6 giờ, widget mỗi 4 giờ). Bấm "Kiểm tra ngay" để kiểm tra lập tức.</div>
+    <div class="upd-section" id="updServer"></div>
+    <div class="upd-section" id="updWidget" style="display:none;"></div>
+  </div>
+</div>
+<script>
+  /* MUC 117 - Cap nhat phan mem: may chu (GET/POST /api/update/*) + widget tren may nay (qua
+     window.widgetBridge, chi co khi trang mo trong widget Electron). Khong dung alert/confirm native. */
+  let updServerStatus = null;
+  let updWidgetStatus = null;
+  const updBridge = () => (window.widgetBridge && typeof window.widgetBridge.getWidgetUpdateStatus === 'function') ? window.widgetBridge : null;
+  const updEsc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const updTime = (iso) => iso ? new Date(iso).toLocaleString('vi-VN') : 'chưa kiểm tra';
+
+  async function refreshUpdateBadge() {
+    try {
+      const res = await fetch('/api/update/status');
+      if (res.ok) updServerStatus = await res.json();
+    } catch { /* bo qua */ }
+    try { if (updBridge()) updWidgetStatus = await updBridge().getWidgetUpdateStatus(); } catch { /* bo qua */ }
+    const hasNew = (updServerStatus && updServerStatus.updateAvailable)
+      || (updWidgetStatus && ['available', 'downloading', 'downloaded'].includes(updWidgetStatus.status));
+    const badge = document.getElementById('updateBadge');
+    if (badge) badge.style.display = hasNew ? '' : 'none';
+    if (document.getElementById('updateModal').style.display === 'flex') renderUpdateModal();
+  }
+  // Cap nhat cham do dinh ky khi dang mo trang chu (ket qua lay tu lan kiem tra ngam cua server/widget)
+  setInterval(() => { if (document.getElementById('staffMenuBox').style.display === 'flex') refreshUpdateBadge(); }, 5 * 60 * 1000);
+
+  function openUpdateModal() {
+    document.getElementById('updateModal').style.display = 'flex';
+    renderUpdateModal();
+    refreshUpdateBadge();
+  }
+  function closeUpdateModal() {
+    document.getElementById('updateModal').style.display = 'none';
+  }
+
+  function renderUpdateModal() {
+    const s = updServerStatus;
+    const box = document.getElementById('updServer');
+    if (!s) {
+      box.innerHTML = '<div class="upd-head">Máy chủ</div><div class="upd-muted">Đang tải trạng thái...</div>';
+    } else {
+      let pill = '<span class="upd-pill">?</span>';
+      if (s.checking) pill = '<span class="upd-pill">Đang kiểm tra...</span>';
+      else if (s.installing) pill = '<span class="upd-pill new">Đang cập nhật</span>';
+      else if (s.updateAvailable) pill = `<span class="upd-pill new">Có bản mới v${updEsc(s.latestVersion)}</span>`;
+      else if (s.latestVersion) pill = '<span class="upd-pill ok">Mới nhất</span>';
+      let html = `<div class="upd-head">Máy chủ ${pill}</div>`;
+      html += `<div class="upd-line">Đang chạy: <b>v${updEsc(s.currentVersion)}</b>${s.latestVersion ? ` · Mới nhất trên GitHub: <b>v${updEsc(s.latestVersion)}</b>` : ''}</div>`;
+      html += `<div class="upd-muted">Kiểm tra lần cuối: ${updTime(s.checkedAt)}${s.repo ? ` · ${updEsc(s.repo)}` : ''}</div>`;
+      if (s.error) html += `<div class="upd-err">${updEsc(s.error)}</div>`;
+      if (s.updateAvailable && s.release && s.release.notes) html += `<div class="upd-notes">${updEsc(s.release.notes)}</div>`;
+      if (s.installStage) html += `<div class="upd-line"><b>${updEsc(s.installStage)}</b></div>`;
+      if (s.installError) html += `<div class="upd-err">${updEsc(s.installError)}</div>`;
+      html += '<div class="upd-actions">';
+      html += `<button class="btn-secondary" onclick="updCheckServer()" ${s.checking || s.installing ? 'disabled' : ''}>Kiểm tra ngay</button>`;
+      if (s.updateAvailable && s.canAutoInstall && !s.installing) {
+        html += `<button class="btn-primary" onclick="updInstallServer()">Cập nhật máy chủ lên v${updEsc(s.latestVersion)}</button>`;
+      }
+      if (s.updateAvailable && s.release && s.release.setupUrl) {
+        html += `<a class="btn-secondary" href="${updEsc(s.release.setupUrl)}" target="_blank" rel="noopener" style="text-decoration:none;">Tải bộ cài thủ công</a>`;
+      }
+      html += '</div>';
+      box.innerHTML = html;
+    }
+
+    const wbox = document.getElementById('updWidget');
+    const w = updWidgetStatus;
+    if (!updBridge() || !w) { wbox.style.display = 'none'; return; }
+    wbox.style.display = '';
+    const labels = {
+      idle: ['Chưa kiểm tra', ''], checking: ['Đang kiểm tra...', ''], none: ['Mới nhất', 'ok'],
+      available: [`Có bản mới v${w.latestVersion}`, 'new'], downloading: [`Đang tải v${w.latestVersion} (${w.percent}%)`, 'new'],
+      downloaded: [`Sẵn sàng cập nhật v${w.latestVersion}`, 'new'], error: ['Lỗi kiểm tra', ''], unsupported: ['Bản chạy thử', ''],
+    };
+    const [txt, cls] = labels[w.status] || [w.status, ''];
+    let html = `<div class="upd-head">Widget trên máy này <span class="upd-pill ${cls}">${updEsc(txt)}</span></div>`;
+    html += `<div class="upd-line">Đang dùng: <b>v${updEsc(w.currentVersion)}</b>${w.portable ? ' (bản portable)' : ''}</div>`;
+    html += `<div class="upd-muted">Kiểm tra lần cuối: ${updTime(w.checkedAt)}</div>`;
+    if (w.error) html += `<div class="upd-err">${updEsc(w.error)}</div>`;
+    html += '<div class="upd-actions">';
+    if (w.status === 'downloaded') {
+      html += `<button class="btn-primary" onclick="updInstallWidget()">Khởi động lại widget &amp; cập nhật</button>`;
+    } else if (w.status !== 'unsupported') {
+      html += `<button class="btn-secondary" onclick="updCheckWidget()" ${['checking', 'downloading'].includes(w.status) ? 'disabled' : ''}>Kiểm tra ngay</button>`;
+    }
+    if (w.portable && w.status === 'available' && w.releasesUrl) {
+      html += `<a class="btn-secondary" href="${updEsc(w.releasesUrl)}" target="_blank" rel="noopener" style="text-decoration:none;">Mở trang tải về</a>`;
+    }
+    html += '</div>';
+    wbox.innerHTML = html;
+  }
+
+  async function updCheckServer() {
+    if (updServerStatus) { updServerStatus.checking = true; renderUpdateModal(); }
+    try {
+      const res = await fetch('/api/update/check', { method: 'POST' });
+      if (res.ok) updServerStatus = await res.json();
+    } catch { /* bo qua */ }
+    refreshUpdateBadge();
+  }
+
+  async function updCheckWidget() {
+    if (!updBridge()) return;
+    updWidgetStatus = { ...(updWidgetStatus || {}), status: 'checking' };
+    renderUpdateModal();
+    try { updWidgetStatus = await updBridge().checkWidgetUpdate(); } catch { /* bo qua */ }
+    refreshUpdateBadge();
+  }
+
+  async function updInstallWidget() {
+    const ok = await UiDialog.confirm('Widget sẽ tự đóng, cài bản mới rồi mở lại (khoảng 10-20 giây). Tiếp tục?', { confirmLabel: 'Cập nhật ngay' });
+    if (ok && updBridge()) updBridge().installWidgetUpdate();
+  }
+
+  async function updInstallServer() {
+    const s = updServerStatus;
+    const ok = await UiDialog.confirm(
+      `Cập nhật máy chủ lên v${s.latestVersion}?\n\nMáy chủ sẽ DỪNG khoảng 1-3 phút để cài bản mới rồi tự chạy lại. Trong lúc đó các quầy, kiosk, màn hình gọi số tạm mất kết nối và tự kết nối lại khi xong.\n\nNên cập nhật ngoài giờ tiếp nhận bệnh nhân.`,
+      { confirmLabel: 'Cập nhật máy chủ', danger: true }
+    );
+    if (!ok) return;
+    updServerStatus = { ...s, installing: true, installStage: 'Đang tải bộ cài đặt...', installError: null };
+    renderUpdateModal();
+    try {
+      const res = await fetch('/api/update/install', { method: 'POST' });
+      updServerStatus = await res.json();
+      renderUpdateModal();
+      if (!res.ok) return;
+    } catch {
+      updServerStatus = { ...updServerStatus, installing: false, installError: 'Mất kết nối máy chủ khi gửi lệnh cập nhật.' };
+      renderUpdateModal();
+      return;
+    }
+    // Cho may chu dung (mat ket noi) roi chay lai -> tu tai lai trang
+    let sawDown = false;
+    const started = Date.now();
+    const timer = setInterval(async () => {
+      let up = false;
+      try { up = (await fetch('/api/health', { cache: 'no-store' })).ok; } catch { up = false; }
+      if (!up) sawDown = true;
+      if (sawDown && up) { clearInterval(timer); location.reload(); }
+      if (Date.now() - started > 6 * 60 * 1000) {
+        clearInterval(timer);
+        updServerStatus = { ...updServerStatus, installStage: null, installError: 'Quá 6 phút chưa thấy máy chủ khởi động lại - kiểm tra trên máy chủ (Start Menu > Hệ thống bắt số - Server > Trạng thái máy chủ).' };
+        renderUpdateModal();
+      }
+    }, 3000);
   }
 </script>
 </body>

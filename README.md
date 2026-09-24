@@ -5659,3 +5659,77 @@ khối lệnh); XML tác vụ dựng từ `service.ps1` với đường dẫn ch
 SYSTEM/PT0S/tham số; build lại zip có đủ các file. **Chưa chạy thật trên Windows** (môi trường hiện tại là
 Linux, không có PowerShell) — cần thử 1 lần: chạy `install-autostart.bat`, khởi động lại máy, KHÔNG đăng
 nhập, mở `http://<IP máy chủ>:4000` từ máy khác; rồi chạy `status-server.bat` xem log.
+
+## 116. Bộ cài đặt Setup.exe cho server (thay cho việc chỉ có file zip)
+
+`build-and-publish.bat` giờ tạo **`HeThongBatSo-Server-Setup-X.Y.Z.exe`** (bộ cài NSIS — cùng công cụ
+electron-builder dùng cho bộ cài widget) và vẫn kèm bản zip giải nén cho trường hợp nâng cao. Kịch bản
+bộ cài: `installer/server-installer.nsi`, icon `installer/icon.ico`; `scripts/build-release.js` tự biên dịch.
+
+**Bộ cài làm gì** (giữ đúng các quyết định đã chốt ở mục 31–41):
+- Giao diện tiếng Việt, cần quyền Quản trị viên. Kèm sẵn `node.exe` → máy chủ không cần cài Node.js
+  (bộ cài báo lỗi rõ nếu Windows 32-bit, vì node.exe kèm theo là 64-bit).
+- **Chọn ổ đĩa:** tự điền sẵn ổ cứng đầu tiên KHÁC ổ Windows (vd `D:\HeThongBatSo`, bỏ qua USB/CD/ổ
+  mạng); nếu máy có ổ khác mà người dùng vẫn chọn ổ Windows → báo và bắt chọn lại (mục 37–38).
+- **Tự khởi động cùng Windows ngay khi cài xong**, không cần tick (mục 40) — gọi
+  `tools\service.ps1 -Action install` (mục 115: Task Scheduler, SYSTEM, chạy nền, tự chạy lại, ghi log).
+- **Cập nhật:** chạy bộ cài bản mới → tự nhận thư mục đã cài (không hỏi lại), tự dừng máy chủ (kể cả
+  bản cũ cài bằng Inno Setup: tác vụ `HeThongBatSo_AutoStart`, tiến trình `HeThongBatSo.exe`), xoá
+  `src\`, `node_modules\`, `node\`, `tools\` cũ rồi chép bản mới, chạy lại. **Giữ nguyên** `.env`,
+  `data\` (CSDL), `kiosk-questions.json`, `logs\`, ảnh đơn vị tự thêm trong `public\`.
+- Start Menu → *Hệ thống bắt số - Server*: Mở Hệ thống bắt số, Trạng thái máy chủ, Khởi động lại máy
+  chủ, Dừng máy chủ, Chạy có cửa sổ (chẩn đoán lỗi), Thư mục cài đặt, Gỡ cài đặt. Desktop: *Hệ thống
+  bắt số* (mở trình duyệt đúng cổng `PORT` trong `.env`). Có trong Programs and Features.
+- Trang cuối: tick mở trình duyệt, tick mở `.env` bằng Notepad để sửa mật khẩu.
+- **Gỡ cài đặt:** dừng máy chủ, tắt tự khởi động, xoá phần mềm, **giữ lại** `data\`, `.env`,
+  `kiosk-questions.json`, `logs\`, `public\` (xoá tay nếu thật sự không cần).
+- Cài im lặng hàng loạt: `HeThongBatSo-Server-Setup-X.Y.Z.exe /S` (thêm `/D=D:\HeThongBatSo` ở CUỐI nếu muốn).
+
+**Máy build cần NSIS:** script tự tìm `makensis` (PATH, `C:\Program Files (x86)\NSIS`, bộ NSIS
+electron-builder đã tải khi build widget); không có thì tự cài qua `winget install NSIS.NSIS`.
+
+**Đã kiểm chứng:** biên dịch bộ cài thật bằng NSIS 3.09 (không lỗi/cảnh báo); chạy thật bản thử 64-bit
+bằng Wine 9 ở chế độ im lặng: cài vào đúng ổ khác ổ hệ thống, đủ file, registry gỡ cài đặt, 7 shortcut
+Start Menu + 1 Desktop tên tiếng Việt đúng; cài đè lần 2 → giữ nguyên `.env` (mật khẩu, cổng riêng),
+CSDL, `kiosk-questions.json`, ảnh đơn vị, xoá file mã nguồn cũ, shortcut theo cổng mới; gỡ cài đặt →
+xoá phần mềm + registry, giữ dữ liệu. Phát hiện & sửa khi thử: `${GetDrives}` của NSIS làm bộ cài 64-bit
+bị crash → thay bằng vòng lặp `GetDriveTypeW` tự viết. Publish thử với máy chủ giả lập GitHub: upload đủ
+Setup.exe, zip và 2 file `.sha256`. **Chưa chạy trên Windows thật** (Wine không có PowerShell nên bước
+bật tự khởi động chưa chạy được khi thử) — cần thử 1 lần trên máy chủ thật.
+
+## 117. Kiểm tra cập nhật chạy ngầm + nút "Cập nhật phần mềm" (server và widget)
+
+**Máy chủ** (`src/services/updateService.js`, `src/routes/update.js`):
+- Chạy ngầm: kiểm tra GitHub Release 30 giây sau khi khởi động rồi mỗi 6 giờ (repo lấy từ
+  `build.publish` trong `package.json`). Máy chủ không có Internet → im lặng, chỉ ghi nhận lỗi.
+- Trang chủ (nhân viên) có thẻ mới **"Cập nhật phần mềm"** — **chấm đỏ nhấp nháy** khi có bản mới.
+  Bấm vào: phiên bản đang chạy / mới nhất, nội dung bản phát hành, nút **Kiểm tra ngay**, **Cập nhật máy
+  chủ lên vX** (hỏi xác nhận, khuyên cập nhật ngoài giờ tiếp nhận), **Tải bộ cài thủ công**.
+- Cập nhật: tải `HeThongBatSo-Server-Setup-X.Y.Z.exe` vào `data\updates\` → **đối chiếu SHA256** với file
+  `.sha256` của release (sai → huỷ, không cài) → chạy bộ cài im lặng `/S` qua tác vụ Task Scheduler riêng
+  `HeThongBatSo_Update` (tài khoản SYSTEM, tách khỏi tiến trình server vì bộ cài sẽ dừng chính server).
+  Bộ cài (mục 116) giữ `.env`/dữ liệu, tự chạy lại máy chủ; trang tự tải lại khi máy chủ lên lại.
+- Chỉ tự cài được khi máy chủ cài bằng Setup.exe (chạy nền bằng SYSTEM). Chạy bằng `start-server.bat`
+  (không có quyền quản trị) → báo rõ, dùng nút "Tải bộ cài thủ công".
+- `.env`: `UPDATE_CHECK_ENABLED=false` (tắt), `UPDATE_CHECK_INTERVAL_HOURS`, `UPDATE_GITHUB_REPO`
+  (đổi repo), `UPDATE_GITHUB_TOKEN` (repo private — token chỉ cần quyền đọc).
+- API (chỉ nhân viên đã đăng nhập): `GET /api/update/status`, `POST /api/update/check`, `POST /api/update/install`.
+
+**Widget** (`electron-widget/updater.js`, dùng `electron-updater` + `latest.yml` mà `build-and-publish.bat`
+đã đẩy lên): kiểm tra ngầm 1 phút sau khi mở rồi mỗi 4 giờ, có bản mới thì **tự tải ngầm**, tải xong
+báo bằng **thông báo Windows** (toast — không cướp focus) và mục khay hệ thống **"⬆ Cập nhật lên vX
+(khởi động lại)"**; không bấm thì tự cài khi thoát ứng dụng. Mục khay "Kiểm tra cập nhật (đang dùng vX)"
+để kiểm tra ngay (kết quả hiện bằng hộp thoại riêng của ứng dụng, mục 111). Mở trang chủ trong widget →
+hộp "Cập nhật phần mềm" có thêm phần **Widget trên máy này**. Bản portable chỉ báo có bản mới + mở trang tải.
+
+**Lưu ý triển khai:** các máy đang dùng bản CŨ chưa có tính năng này → cài tay bản mới 1 lần (widget:
+Setup.exe mới; server: Setup.exe mục 116), từ đó trở đi tự cập nhật. Repo GitHub của widget nên để
+**public** (electron-updater đọc release không cần token).
+
+**Đã kiểm chứng:** server với máy chủ giả lập GitHub — chưa đăng nhập bị 401; tìm thấy bản v1.1.0 kèm nội
+dung; tải bộ cài + khớp SHA256 → lưu file, dừng đúng ở bước tạo tác vụ (Linux không có schtasks); file bị
+sửa → báo không khớp SHA256, không lưu; lỗi hiện đúng trên giao diện. Trang chủ (Playwright): chấm đỏ,
+phần máy chủ + widget, nút cập nhật widget gọi đúng hàm, không hộp thoại native. Widget: chạy
+`updater.js` thật trong Electron với nguồn cập nhật giả lập — kiểm tra → tải ngầm → xác minh sha512 →
+"downloaded", menu khay đổi đúng, hộp thoại đúng; lỗi mạng → hộp thoại lỗi. **Chưa chạy trên Windows
+thật** (bước chạy bộ cài).
